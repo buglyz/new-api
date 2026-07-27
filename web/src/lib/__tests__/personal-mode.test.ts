@@ -108,8 +108,24 @@ describe('personal mode decisions', () => {
       '/system-settings/site'
     )
     assert.equal(
+      getPersonalModeRedirect('/system-settings/content/dashboard', true, true),
+      null
+    )
+    assert.equal(
       getPersonalModeRedirect('/system-settings/auth/oauth', true, true),
       '/system-settings/auth/passkey'
+    )
+    assert.equal(
+      getPersonalModeRedirect(
+        '/system-settings/site/header-navigation',
+        true,
+        true
+      ),
+      '/system-settings/site'
+    )
+    assert.equal(
+      getPersonalModeRedirect('/system-settings/models/grok', true, true),
+      '/system-settings/models/routing-reliability'
     )
   })
 
@@ -128,6 +144,7 @@ describe('personal mode decisions', () => {
       '/system-settings/models',
       '/system-settings/security',
       '/system-settings/operations',
+      '/system-settings/content/dashboard',
       '/system-settings/auth/passkey',
       '/setup',
     ]) {
@@ -194,6 +211,16 @@ describe('personal mode decisions', () => {
             ],
           },
           {
+            title: 'Console Content',
+            items: [
+              {
+                title: 'Data Dashboard',
+                url: '/system-settings/content/dashboard',
+              },
+              { title: 'FAQ', url: '/system-settings/content/faq' },
+            ],
+          },
+          {
             title: 'Operations',
             items: [
               {
@@ -223,6 +250,15 @@ describe('personal mode decisions', () => {
             items: [{ title: 'Passkey', url: '/system-settings/auth/passkey' }],
           },
           {
+            title: 'Console Content',
+            items: [
+              {
+                title: 'Data Dashboard',
+                url: '/system-settings/content/dashboard',
+              },
+            ],
+          },
+          {
             title: 'Operations',
             items: [
               {
@@ -245,6 +281,18 @@ describe('personal mode decisions', () => {
     assert.equal(
       isPersonalModeNavPathDisabled('/system-settings/auth/passkey'),
       false
+    )
+    assert.equal(
+      isPersonalModeNavPathDisabled('/system-settings/content/dashboard'),
+      false
+    )
+    assert.equal(
+      isPersonalModeNavPathDisabled('/system-settings/site/header-navigation'),
+      true
+    )
+    assert.equal(
+      isPersonalModeNavPathDisabled('/system-settings/models/grok'),
+      true
     )
     assert.equal(isPersonalModeNavPathDisabled('/channels'), false)
   })

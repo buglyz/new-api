@@ -25,6 +25,8 @@ import type { NavGroup } from '@/components/layout/types'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CacheStatsDialog } from '@/features/system-settings/general/channel-affinity/cache-stats-dialog'
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
+import { useStatus } from '@/hooks/use-status'
+import { isPersonalModeEnabled } from '@/lib/personal-mode'
 
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
 import {
@@ -57,6 +59,8 @@ const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
 
 function UsageLogsContent() {
   const { t } = useTranslation()
+  const { status } = useStatus()
+  const personalMode = isPersonalModeEnabled(status)
   const navigate = useNavigate()
   const params = route.useParams()
   const activeCategory: UsageLogsSectionId =
@@ -158,11 +162,13 @@ function UsageLogsContent() {
         </SectionPageLayout.Content>
       </SectionPageLayout>
 
-      <UserInfoDialog
-        userId={selectedUserId}
-        open={userInfoDialogOpen}
-        onOpenChange={setUserInfoDialogOpen}
-      />
+      {!personalMode && (
+        <UserInfoDialog
+          userId={selectedUserId}
+          open={userInfoDialogOpen}
+          onOpenChange={setUserInfoDialogOpen}
+        />
+      )}
 
       <CacheStatsDialog
         open={affinityDialogOpen}

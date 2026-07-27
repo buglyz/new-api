@@ -1,7 +1,7 @@
 # NewAPI Personal Failover Mode
 
 Date: 2026-07-27
-Status: Reliability control loop published and deployed
+Status: Personal usage accuracy follow-up verified; pending publish
 
 ## Objective
 
@@ -87,16 +87,38 @@ subscription, redemption, and public marketing surfaces while the mode is on.
 - [x] Add focused API and frontend aggregation tests.
 - [x] Re-run frontend checks/build before the complete Go test suite.
 
+## Personal Usage Accuracy And Presentation Follow-up
+
+- [x] Remove remaining personal-mode balance, cost, pricing, and billing copy
+  from the dashboard, profile, and usage logs without hiding operational data.
+- [x] Include unflushed `quota_data` cache entries in exact total and recent
+  token counts without adding another high-frequency aggregate query.
+- [x] Report disabled data export explicitly and keep its operational settings
+  reachable in personal mode.
+- [x] Add component coverage for personal/standard mode, API errors, empty
+  data, large integer formatting, and responsive card layout.
+- [x] Re-run the required frontend and backend verification sequence and review
+  standard-mode behavior.
+- [ ] Push the verified source and verify the Docker workflow.
+
 ### Personal Usage Verification
 
 - Personal-mode cards show last-24-hour tokens, recorded total tokens, and
   request count; quota and currency values remain confined to standard mode.
-- Focused frontend tests: 11 passed across token aggregation and personal-mode
-  decisions.
+- `/api/data/self/summary` returns exact decimal strings for recent and total
+  tokens plus an explicit tracking flag. One aggregate query reads both sums;
+  the response also includes the current process's pending cache generation.
+- Successful cache flushes are transactional; failed flushes retain pending
+  rows for retry. Disabling data export and graceful shutdown both attempt a
+  final flush without recording new rows after export is disabled.
+- Focused frontend tests: 76 passed across personal/standard mode, token API
+  error/empty/large-number states, responsive layout, flow metrics, channels,
+  keys, pagination, costs, policy violations, and failover traces.
 - `bun run typecheck`, changed-file OXLint, `bun run format:check`, i18n sync,
   and the production frontend build passed.
 - `GOMAXPROCS=1 go test -p 1 ./...` passed after the frontend build.
-- `git diff --check` and changed-file size review passed.
+- `git diff --check`, `gofmt`, changed-file size review, sensitive-data review,
+  and the standard-mode branch review passed.
 
 ### Reliability Policy
 

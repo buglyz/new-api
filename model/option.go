@@ -275,6 +275,9 @@ func updateOptionMap(key string, value string) (err error) {
 		common.OptionMapRWMutex.Unlock()
 		return nil
 	}
+	if key == "DataExportEnabled" && common.DataExportEnabled && value != "true" {
+		SaveQuotaDataCache()
+	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
 	common.OptionMap[key] = value

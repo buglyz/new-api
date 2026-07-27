@@ -552,7 +552,9 @@ export function OverviewDashboard() {
       },
       {
         title: t('Usage Logs'),
-        description: t('Inspect requests, errors, and billing details'),
+        description: personalMode
+          ? t('Inspect requests, errors, and retry details')
+          : t('Inspect requests, errors, and billing details'),
         to: '/usage-logs',
         icon: FileText,
       },
@@ -563,7 +565,7 @@ export function OverviewDashboard() {
         icon: BookOpen,
       },
     ],
-    [t]
+    [personalMode, t]
   )
 
   const visibleQuickActions = useMemo(() => {
@@ -651,9 +653,13 @@ export function OverviewDashboard() {
                         {t('Build on your API gateway in minutes')}
                       </h3>
                       <p className='text-muted-foreground max-w-xl text-sm leading-relaxed'>
-                        {t(
-                          'A focused home for keys, balance, routing, and service health.'
-                        )}
+                        {personalMode
+                          ? t(
+                              'A focused home for keys, routing, and service health.'
+                            )
+                          : t(
+                              'A focused home for keys, balance, routing, and service health.'
+                            )}
                       </p>
                     </div>
                     <div className='flex flex-wrap items-center gap-2'>

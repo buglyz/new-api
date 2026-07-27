@@ -98,6 +98,7 @@ interface FlowChartsProps {
   filters?: DashboardFilters
   // When false, sensitive node labels are masked in the rendered Sankey.
   sensitiveVisible?: boolean
+  personalMode?: boolean
 }
 
 const FLOW_METRIC_OPTIONS = [
@@ -266,6 +267,11 @@ export function FlowCharts(props: FlowChartsProps) {
     flowRole = 'admin'
   }
   const [metric, setMetric] = useState<FlowMetric>('quota')
+  const activeMetric =
+    props.personalMode && metric === 'quota' ? 'tokens' : metric
+  const metricOptions = props.personalMode
+    ? FLOW_METRIC_OPTIONS.filter((option) => option.value !== 'quota')
+    : FLOW_METRIC_OPTIONS
   const [topNodeLimit, setTopNodeLimit] = useState(DEFAULT_FLOW_TOP_NODE_LIMIT)
   const [overflowMode, setOverflowMode] =
     useState<FlowOverflowMode>('aggregate')
@@ -345,7 +351,7 @@ export function FlowCharts(props: FlowChartsProps) {
   const maskSensitive = props.sensitiveVisible === false
   const flowData = useMemo(
     () =>
-      buildDashboardFlowData(isLoading ? [] : (flowRows ?? []), metric, {
+      buildDashboardFlowData(isLoading ? [] : (flowRows ?? []), activeMetric, {
         role: flowRole,
         selectedUsers,
         selectedNodes,
@@ -362,7 +368,7 @@ export function FlowCharts(props: FlowChartsProps) {
       flowRole,
       flowRows,
       isLoading,
-      metric,
+      activeMetric,
       overflowMode,
       activeFlowNode,
       activeFlowLink,
@@ -391,11 +397,13 @@ export function FlowCharts(props: FlowChartsProps) {
       flowData.filterOptions.nodes.filter((option) => option.kind !== 'user'),
     [flowData.filterOptions.nodes]
   )
-  const metricLabel = t(FLOW_METRIC_LABEL_KEYS[metric])
+  const metricLabel = t(FLOW_METRIC_LABEL_KEYS[activeMetric])
   const formatNodeMetricValue = useCallback(
     (value: number) =>
-      metric === 'quota' ? formatQuota(value) : formatFlowMetricNumber(value),
-    [metric]
+      activeMetric === 'quota'
+        ? formatQuota(value)
+        : formatFlowMetricNumber(value),
+    [activeMetric]
   )
   // Explicit filters (the chips/dropdown control) narrow the rows that feed the
   // chart. They are intentionally independent from the click-to-highlight state
@@ -455,16 +463,16 @@ export function FlowCharts(props: FlowChartsProps) {
   const flowSpec = useMemo(
     () =>
       buildFlowSankeySpec(flowData.flow, chartTitle, formatQuota, {
-        quota: t('Quota'),
+        quota: props.personalMode ? '' : t('Quota'),
         tokens: t('Tokens'),
         requests: t('Requests'),
         share: t('Share'),
       }),
-    [chartTitle, flowData.flow, t]
+    [chartTitle, flowData.flow, props.personalMode, t]
   )
   const chartTheme = resolvedTheme === 'dark' ? 'dark' : 'light'
   const chartKey = [
-    metric,
+    activeMetric,
     topNodeLimit,
     overflowMode,
     flowRole,
@@ -559,12 +567,12 @@ export function FlowCharts(props: FlowChartsProps) {
               </TooltipProvider>
             </div>
             <Tabs
-              value={metric}
+              value={activeMetric}
               onValueChange={(value) => setMetric(value as FlowMetric)}
               className='shrink-0'
             >
               <TabsList aria-label={t('Flow width metric')}>
-                {FLOW_METRIC_OPTIONS.map((option) => {
+                {metricOptions.map((option) => {
                   const Icon = option.icon
                   return (
                     <TabsTrigger

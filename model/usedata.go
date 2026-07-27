@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -38,22 +39,31 @@ type QuotaDataLogParams struct {
 	NodeName  string
 }
 
+// UserUsageSummary reports a single user's aggregated token usage.
+//
+// Token totals use JSON strings so values above JavaScript's safe integer
+// range remain exact in the dashboard.
 type UserUsageSummary struct {
-	TotalTokens int64 `json:"total_tokens"`
+	Last24hTokens int64 `json:"last_24h_tokens,string"`
+	TotalTokens   int64 `json:"total_tokens,string"`
+	TokensTracked bool  `json:"tokens_tracked"`
 }
 
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
 			common.SysLog("正在更新数据看板数据...")
-			SaveQuotaDataCache()
 		}
+		// A failed or final flush can leave pending rows after export is disabled.
+		// Retrying the existing cache does not record any new usage.
+		SaveQuotaDataCache()
 		time.Sleep(time.Duration(common.DataExportInterval) * time.Minute)
 	}
 }
 
 var CacheQuotaData = make(map[string]*QuotaData)
 var CacheQuotaDataLock = sync.Mutex{}
+var cacheQuotaDataGeneration uint64
 
 func logQuotaDataCache(quotaData *QuotaData) {
 	key := fmt.Sprintf("%d\x00%s\x00%s\x00%d\x00%s\x00%d\x00%d\x00%s",
@@ -105,31 +115,50 @@ func SaveQuotaDataCache() {
 	CacheQuotaDataLock.Lock()
 	defer CacheQuotaDataLock.Unlock()
 	size := len(CacheQuotaData)
+	if size == 0 {
+		return
+	}
 	// 如果缓存中有数据，就保存到数据库中
 	// 1. 先查询数据库中是否有数据
 	// 2. 如果有数据，就更新数据
 	// 3. 如果没有数据，就插入数据
-	for _, quotaData := range CacheQuotaData {
-		quotaDataDB := &QuotaData{}
-		DB.Table("quota_data").
-			Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
-				quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
-			First(quotaDataDB)
-		if quotaDataDB.Id > 0 {
-			//quotaDataDB.Count += quotaData.Count
-			//quotaDataDB.Quota += quotaData.Quota
-			//DB.Table("quota_data").Save(quotaDataDB)
-			increaseQuotaData(quotaData)
-		} else {
-			DB.Table("quota_data").Create(quotaData)
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		for _, quotaData := range CacheQuotaData {
+			quotaDataDB := &QuotaData{}
+			err := tx.Table("quota_data").
+				Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
+					quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
+				First(quotaDataDB).Error
+			if err == nil {
+				if err := increaseQuotaData(tx, quotaData); err != nil {
+					return err
+				}
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+
+			record := *quotaData
+			record.Id = 0
+			if err := tx.Table("quota_data").Create(&record).Error; err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		common.SysError(fmt.Sprintf("保存数据看板数据失败，保留%d条缓存数据: %s", size, err))
+		return
 	}
+
 	CacheQuotaData = make(map[string]*QuotaData)
+	cacheQuotaDataGeneration++
 	common.SysLog(fmt.Sprintf("保存数据看板数据成功，共保存%d条数据", size))
 }
 
-func increaseQuotaData(quotaData *QuotaData) {
-	err := DB.Table("quota_data").
+func increaseQuotaData(tx *gorm.DB, quotaData *QuotaData) error {
+	return tx.Table("quota_data").
 		Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
 			quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
 		Updates(map[string]interface{}{
@@ -137,9 +166,6 @@ func increaseQuotaData(quotaData *QuotaData) {
 			"quota":      gorm.Expr("quota + ?", quotaData.Quota),
 			"token_used": gorm.Expr("token_used + ?", quotaData.TokenUsed),
 		}).Error
-	if err != nil {
-		common.SysLog(fmt.Sprintf("increaseQuotaData error: %s", err))
-	}
 }
 
 func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
@@ -164,12 +190,51 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 	return quotaDatas, err
 }
 
-func GetUserUsageSummary(userId int) (summary UserUsageSummary, err error) {
-	err = DB.Table("quota_data").
-		Select("COALESCE(sum(token_used), 0) as total_tokens").
-		Where("user_id = ?", userId).
-		Scan(&summary).Error
-	return summary, err
+func cachedUserUsage(userId int, recentSince int64) (total int64, recent int64, generation uint64) {
+	CacheQuotaDataLock.Lock()
+	defer CacheQuotaDataLock.Unlock()
+	for _, quotaData := range CacheQuotaData {
+		if quotaData.UserID == userId {
+			total += int64(quotaData.TokenUsed)
+			if quotaData.CreatedAt >= recentSince {
+				recent += int64(quotaData.TokenUsed)
+			}
+		}
+	}
+	return total, recent, cacheQuotaDataGeneration
+}
+
+func quotaDataGeneration() uint64 {
+	CacheQuotaDataLock.Lock()
+	defer CacheQuotaDataLock.Unlock()
+	return cacheQuotaDataGeneration
+}
+
+func GetUserUsageSummary(userId int, recentSince int64) (summary UserUsageSummary, err error) {
+	for {
+		generationBefore := quotaDataGeneration()
+		var persisted struct {
+			Last24hTokens int64
+			TotalTokens   int64
+		}
+		err = DB.Table("quota_data").
+			Select("COALESCE(SUM(token_used), 0) AS total_tokens, COALESCE(SUM(CASE WHEN created_at >= ? THEN token_used ELSE 0 END), 0) AS last24h_tokens", recentSince).
+			Where("user_id = ?", userId).
+			Scan(&persisted).Error
+		if err != nil {
+			return summary, err
+		}
+
+		pendingTotal, pendingRecent, generationAfter := cachedUserUsage(userId, recentSince)
+		if generationBefore != generationAfter {
+			continue
+		}
+
+		summary.TotalTokens = persisted.TotalTokens + pendingTotal
+		summary.Last24hTokens = persisted.Last24hTokens + pendingRecent
+		summary.TokensTracked = common.DataExportEnabled
+		return summary, nil
+	}
 }
 
 func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {

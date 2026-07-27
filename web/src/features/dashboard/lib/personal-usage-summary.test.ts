@@ -16,24 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { describe, expect, it } from 'vitest'
+import assert from 'node:assert/strict'
+import { describe, test } from 'node:test'
 
 import {
   buildPersonalUsageSparklines,
   calculatePersonalUsage,
+  formatTokenCount,
 } from './personal-usage-summary'
 
 describe('personal usage summary', () => {
-  it('aggregates token usage independently from quota', () => {
-    expect(
+  test('aggregates token usage independently from quota', () => {
+    assert.deepEqual(
       calculatePersonalUsage([
         { created_at: 100, token_used: 120, count: 2, quota: 9_999 },
         { created_at: 200, token_used: 80, count: 1, quota: 1 },
-      ])
-    ).toEqual({ tokens: 200, requests: 3 })
+      ]),
+      { tokens: 200, requests: 3 }
+    )
   })
 
-  it('builds bounded token and request sparklines', () => {
+  test('builds bounded token and request sparklines', () => {
     const result = buildPersonalUsageSparklines(
       [
         { created_at: 0, token_used: 10, count: 1 },
@@ -44,9 +47,21 @@ describe('personal usage summary', () => {
       200
     )
 
-    expect(result.tokens[0]).toBe(10)
-    expect(result.tokens[6]).toBe(20)
-    expect(result.tokens[11]).toBe(30)
-    expect(result.requests.reduce((sum, value) => sum + value, 0)).toBe(6)
+    assert.equal(result.tokens[0], 10)
+    assert.equal(result.tokens[6], 20)
+    assert.equal(result.tokens[11], 30)
+    assert.equal(
+      result.requests.reduce((sum, value) => sum + value, 0),
+      6
+    )
+  })
+
+  test('formats exact token totals beyond the JavaScript safe integer range', () => {
+    assert.equal(
+      formatTokenCount('9007199254740993', 'en-US'),
+      '9,007,199,254,740,993'
+    )
+    assert.equal(formatTokenCount('0', 'en-US'), '0')
+    assert.equal(formatTokenCount('invalid', 'en-US'), '-')
   })
 })

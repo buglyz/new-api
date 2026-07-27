@@ -32,8 +32,10 @@ import type {
   QuotaDataItem,
   DashboardFilters,
 } from '@/features/dashboard/types'
+import { useStatus } from '@/hooks/use-status'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
+import { isPersonalModeEnabled } from '@/lib/personal-mode'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -61,6 +63,8 @@ function formatStatNumber(value: number, locale: Intl.LocalesArgument) {
 export function LogStatCards(props: LogStatCardsProps) {
   const { i18n } = useTranslation()
   const statCardsConfig = useModelStatCardsConfig()
+  const { status } = useStatus()
+  const personalMode = isPersonalModeEnabled(status)
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
   const [stats, setStats] = useState<{
@@ -121,7 +125,10 @@ export function LogStatCards(props: LogStatCardsProps) {
     tpm: stats?.totalTokens ?? 0,
   }
 
-  const items = statCardsConfig.map((config) => {
+  const visibleStatCardsConfig = personalMode
+    ? statCardsConfig.filter((config) => config.key !== 'quota')
+    : statCardsConfig
+  const items = visibleStatCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
     const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
     const formatted =
@@ -144,7 +151,12 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+      <div
+        className={cn(
+          'divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3',
+          personalMode ? 'lg:grid-cols-4' : 'lg:grid-cols-5'
+        )}
+      >
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

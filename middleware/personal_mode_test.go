@@ -57,6 +57,7 @@ func TestPersonalModeCapabilityMatrix(t *testing.T) {
 			{http.MethodPost, "/api/token/"},
 			{http.MethodGet, "/api/log/self"},
 			{http.MethodGet, "/api/data/self"},
+			{http.MethodGet, "/api/data/self/summary"},
 			{http.MethodGet, "/api/system-info/instances"},
 			{http.MethodGet, "/api/performance/stats"},
 			{http.MethodGet, "/api/perf-metrics"},
@@ -181,15 +182,17 @@ func TestPersonalModeMiddleware(t *testing.T) {
 			assert.Equal(t, http.StatusForbidden, blocked.Code, key)
 		}
 
-		allowed := httptest.NewRecorder()
-		allowedRequest := httptest.NewRequest(
-			http.MethodPut,
-			"/api/option/",
-			strings.NewReader(`{"key":"RetryTimes","value":3}`),
-		)
-		allowedRequest.Header.Set("Content-Type", "application/json")
-		newRouter().ServeHTTP(allowed, allowedRequest)
-		assert.Equal(t, http.StatusOK, allowed.Code)
-		assert.JSONEq(t, `{"success":true,"key":"RetryTimes"}`, allowed.Body.String())
+		for _, key := range []string{"RetryTimes", "DataExportEnabled"} {
+			allowed := httptest.NewRecorder()
+			allowedRequest := httptest.NewRequest(
+				http.MethodPut,
+				"/api/option/",
+				strings.NewReader(`{"key":"`+key+`","value":true}`),
+			)
+			allowedRequest.Header.Set("Content-Type", "application/json")
+			newRouter().ServeHTTP(allowed, allowedRequest)
+			assert.Equal(t, http.StatusOK, allowed.Code, key)
+			assert.JSONEq(t, `{"success":true,"key":"`+key+`"}`, allowed.Body.String())
+		}
 	})
 }

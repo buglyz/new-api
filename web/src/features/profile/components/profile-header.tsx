@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 
 import { getDisplayName } from '../lib'
 import type { UserProfile } from '../types'
@@ -38,12 +39,13 @@ import type { UserProfile } from '../types'
 interface ProfileHeaderProps {
   profile: UserProfile | null
   loading: boolean
+  personalMode: boolean
 }
 
-export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
+export function ProfileHeader(props: ProfileHeaderProps) {
   const { t } = useTranslation()
 
-  if (loading) {
+  if (props.loading) {
     return (
       <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
         <CardContent className='p-4 sm:p-5'>
@@ -63,8 +65,16 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
           </div>
         </CardContent>
         <div className='border-t'>
-          <div className='divide-border/60 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0'>
-            {['balance', 'usage', 'requests'].map((key) => (
+          <div
+            className={cn(
+              'divide-border/60 grid grid-cols-1 divide-y sm:divide-y-0',
+              !props.personalMode && 'sm:grid-cols-3 sm:divide-x'
+            )}
+          >
+            {(props.personalMode
+              ? ['requests']
+              : ['balance', 'usage', 'requests']
+            ).map((key) => (
               <div key={key} className='px-4 py-3.5 sm:px-5 sm:py-4'>
                 <Skeleton className='h-3.5 w-20' />
                 <Skeleton className='mt-2 h-7 w-28' />
@@ -77,13 +87,13 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     )
   }
 
-  if (!profile) return null
+  if (!props.profile) return null
 
-  const displayName = getDisplayName(profile)
-  const avatarName = profile.username || displayName
+  const displayName = getDisplayName(props.profile)
+  const avatarName = props.profile.username || displayName
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
-  const roleLabel = getRoleLabel(profile.role)
+  const roleLabel = getRoleLabel(props.profile.role)
   const stats: {
     label: string
     value: string
@@ -92,27 +102,31 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
     tone: IconBadgeTone
   }[] = [
     {
-      label: t('Current Balance'),
-      value: formatQuota(profile.quota),
-      description: t('Remaining quota'),
-      icon: WalletCards,
-      tone: 'success',
-    },
-    {
-      label: t('Total Usage'),
-      value: formatQuota(profile.used_quota),
-      description: t('Total consumed quota'),
-      icon: BarChart3,
-      tone: 'info',
-    },
-    {
       label: t('API Requests'),
-      value: formatCompactNumber(profile.request_count),
+      value: formatCompactNumber(props.profile.request_count),
       description: t('Total requests made'),
       icon: Activity,
       tone: 'chart-4',
     },
   ]
+  if (!props.personalMode) {
+    stats.unshift(
+      {
+        label: t('Current Balance'),
+        value: formatQuota(props.profile.quota),
+        description: t('Remaining quota'),
+        icon: WalletCards,
+        tone: 'success',
+      },
+      {
+        label: t('Total Usage'),
+        value: formatQuota(props.profile.used_quota),
+        description: t('Total consumed quota'),
+        icon: BarChart3,
+        tone: 'info',
+      }
+    )
+  }
 
   return (
     <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
@@ -138,24 +152,24 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
                 copyable={false}
               />
               <StatusBadge
-                label={`${t('User ID')} ${profile.id}`}
+                label={`${t('User ID')} ${props.profile.id}`}
                 variant='info'
-                copyText={String(profile.id)}
+                copyText={String(props.profile.id)}
               />
             </div>
 
             <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:gap-x-4 sm:text-sm'>
-              <span className='truncate'>@{profile.username}</span>
-              {profile.email && (
+              <span className='truncate'>@{props.profile.username}</span>
+              {props.profile.email && (
                 <>
                   <span>•</span>
-                  <span className='truncate'>{profile.email}</span>
+                  <span className='truncate'>{props.profile.email}</span>
                 </>
               )}
-              {profile.group && (
+              {props.profile.group && (
                 <>
                   <span>•</span>
-                  <span className='truncate'>{profile.group}</span>
+                  <span className='truncate'>{props.profile.group}</span>
                 </>
               )}
             </div>
@@ -163,7 +177,12 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
         </div>
       </CardContent>
       <div className='border-t'>
-        <div className='divide-border/60 grid grid-cols-3 divide-x'>
+        <div
+          className={cn(
+            'divide-border/60 grid divide-x',
+            props.personalMode ? 'grid-cols-1' : 'grid-cols-3'
+          )}
+        >
           {stats.map((item) => (
             <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
               <div className='flex items-center gap-2'>

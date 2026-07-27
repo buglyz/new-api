@@ -777,6 +777,25 @@ describe('dashboard flow data', () => {
     )
   })
 
+  test('omits quota from Sankey tooltips when its label is disabled', () => {
+    const result = buildDashboardFlowData(rows.slice(0, 1), 'tokens', {
+      role: 'root',
+    })
+    const flowSpec = buildFlowSankeySpec(result.flow, 'Flow', undefined, {
+      quota: '',
+      tokens: 'Tokens',
+      requests: 'Requests',
+      share: 'Share',
+    })
+
+    assert.deepEqual(
+      flowSpec.tooltip.mark.content.map((row: Record<string, unknown>) =>
+        String(row.key)
+      ),
+      ['Tokens', 'Requests', 'Share']
+    )
+  })
+
   test('maps active flow highlight states into the Sankey spec', () => {
     const result = buildDashboardFlowData(rows, 'quota', {
       role: 'root',

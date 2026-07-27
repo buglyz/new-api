@@ -86,7 +86,7 @@ func GetUserQuotaDates(c *gin.Context) {
 }
 
 func GetUserUsageSummary(c *gin.Context) {
-	summary, err := model.GetUserUsageSummary(c.GetInt("id"))
+	summary, err := model.GetUserUsageSummary(c.GetInt("id"), common.GetTimestamp()-24*60*60)
 	if err != nil {
 		common.ApiError(c, err)
 		return

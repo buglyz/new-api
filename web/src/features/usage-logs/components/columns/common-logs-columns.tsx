@@ -102,9 +102,10 @@ function buildDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
   t: (key: string, opts?: Record<string, unknown>) => string,
-  isAdmin: boolean
+  isAdmin: boolean,
+  personalMode: boolean
 ): DetailSegment[] {
-  const segments = buildTypeDetailSegments(log, other, t)
+  const segments = buildTypeDetailSegments(log, other, t, personalMode)
   // Quota saturation is a rare, admin-only anomaly marker; surface it first
   // and in danger styling so it stands out on the related billing log. The
   // backend already strips admin_info for non-admins; gate on isAdmin too as
@@ -115,10 +116,11 @@ function buildDetailSegments(
   return segments
 }
 
-function buildTypeDetailSegments(
+export function buildTypeDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
-  t: (key: string, opts?: Record<string, unknown>) => string
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  personalMode: boolean
 ): DetailSegment[] {
   // Audit (type=3) and login (type=7) logs: render localized content from the
   // structured op descriptor instead of the raw (English-fallback) content.
@@ -136,21 +138,32 @@ function buildTypeDetailSegments(
   const isViolation = isViolationFeeLog(other)
   if (isViolation) {
     const segments: DetailSegment[] = []
-    segments.push({ text: t('Violation Fee'), danger: true })
+    segments.push({
+      text: t(personalMode ? 'Policy violation' : 'Violation Fee'),
+      danger: true,
+    })
     if (other?.violation_fee_code) {
       segments.push({
         text: other.violation_fee_code,
         muted: true,
       })
     }
-    segments.push({
-      text: `${t('Fee')}: ${formatLogQuota(other?.fee_quota ?? log.quota)}`,
-      muted: true,
-    })
+    if (!personalMode) {
+      segments.push({
+        text: `${t('Fee')}: ${formatLogQuota(other?.fee_quota ?? log.quota)}`,
+        muted: true,
+      })
+    }
     return segments
   }
 
   if (!other) return []
+
+  if (personalMode) {
+    return other.is_system_prompt_overwritten
+      ? [{ text: t('System Prompt Override'), danger: true }]
+      : []
+  }
 
   const segments: DetailSegment[] = []
 
@@ -291,6 +304,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
   const { t } = useTranslation()
   const { status } = useStatus()
   const personalMode = isPersonalModeEnabled(status)
+  const costColumn: ColumnDef<UsageLog> = {
+    accessorKey: 'quota',
+    header: t('Cost'),
+    cell: ({ row }) => {
+      const log = row.original
+      if (!isDisplayableLogType(log.type)) return null
+
+      const quota = row.getValue('quota') as number
+      const other = parseLogOther(log.other)
+      return <LogCostDisplay quota={quota} other={other} />
+    },
+  }
   const columns: ColumnDef<UsageLog>[] = [
     {
       accessorKey: 'created_at',
@@ -699,19 +724,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
     },
-    {
-      accessorKey: 'quota',
-      header: t('Cost'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
-
-        const quota = row.getValue('quota') as number
-        const other = parseLogOther(log.other)
-        return <LogCostDisplay quota={quota} other={other} />
-      },
-    },
-
+    ...(!personalMode ? [costColumn] : []),
     {
       accessorKey: 'use_time',
       header: t('Timing'),
@@ -741,7 +754,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         const other = parseLogOther(log.other)
 
-        const segments = buildDetailSegments(log, other, t, isAdmin)
+        const segments = buildDetailSegments(
+          log,
+          other,
+          t,
+          isAdmin,
+          personalMode
+        )
         const primary = segments[0]
         const hasMore = segments.length > 1
         let primaryTextClass = 'text-foreground'
@@ -767,7 +786,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               )}
             </span>
           )
-        } else if (log.content) {
+        } else if (
+          log.content &&
+          (!personalMode || [3, 5, 7].includes(log.type))
+        ) {
           detailPreview = (
             <span className='text-muted-foreground truncate group-hover:underline'>
               {log.content}

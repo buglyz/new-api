@@ -323,10 +323,12 @@ function CommonLogsCard<TData>({
     <div className='space-y-2.5'>
       <div className='flex min-w-0 items-center justify-between gap-3'>
         <CompactCell cell={modelCell} className='flex-1' />
-        <CompactCell
-          cell={quotaCell}
-          className='shrink-0 text-right [&_.flex-col]:items-end'
-        />
+        {quotaCell && (
+          <CompactCell
+            cell={quotaCell}
+            className='shrink-0 text-right [&_.flex-col]:items-end'
+          />
+        )}
       </div>
 
       <div className='grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] gap-1.5'>

@@ -494,12 +494,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const isConsume = props.log.type === 2
   const isTopup = props.log.type === 1
   const isManage = props.log.type === 3
-  const isSubscription = other?.billing_source === 'subscription'
+  const isSubscription =
+    !personalMode && other?.billing_source === 'subscription'
   const isTieredBilling =
+    !personalMode &&
     isConsume &&
     !isViolation &&
     other?.billing_mode === 'tiered_expr' &&
     !!other?.expr_b64
+  const showRawDetails =
+    details && (!personalMode || [3, 5, 7].includes(props.log.type))
   const hasAudioTokens = other?.ws || other?.audio
   const showTiming = isTimingLogType(props.log.type)
   const showAdminIp =
@@ -536,6 +540,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
       : []
   const showLegacyTopupWarning = isTopup && props.isAdmin && !adminInfo
   const showTopupAuditSection =
+    !personalMode &&
     isTopup &&
     props.isAdmin &&
     (topupAuditFields.length > 0 || showLegacyTopupWarning)
@@ -867,7 +872,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {isViolation && other && (
           <DetailSection
             icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
-            label={t('Violation Fee')}
+            label={t(personalMode ? 'Policy violation' : 'Violation Fee')}
             variant='danger'
           >
             {other.violation_fee_code && (
@@ -883,11 +888,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 value={other.violation_fee_marker}
               />
             )}
-            <DetailRow
-              label={t('Fee Amount')}
-              value={formatLogQuota(other.fee_quota ?? props.log.quota)}
-              mono
-            />
+            {!personalMode && (
+              <DetailRow
+                label={t('Fee Amount')}
+                value={formatLogQuota(other.fee_quota ?? props.log.quota)}
+                mono
+              />
+            )}
           </DetailSection>
         )}
 
@@ -1102,7 +1109,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Billing breakdown (consume type) */}
-        {isConsume && other && !isViolation && (
+        {!personalMode && isConsume && other && !isViolation && (
           <BillingBreakdown
             log={props.log}
             other={other}
@@ -1123,7 +1130,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Admin billing mode indicator for non-consume */}
-        {props.isAdmin &&
+        {!personalMode &&
+          props.isAdmin &&
           !isConsume &&
           props.log.type !== 6 &&
           other?.admin_info && (
@@ -1266,7 +1274,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Content */}
-        {details && (
+        {showRawDetails && (
           <div className='space-y-1.5'>
             <Label className='text-xs font-semibold'>{t('Content')}</Label>
             <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>

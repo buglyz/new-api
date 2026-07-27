@@ -1090,7 +1090,7 @@ function tooltipMetricLines(
   const hasMetric = (datum: Record<string, unknown>, key: string) =>
     metricValue(datum, key) > 0
 
-  return [
+  const rows = [
     {
       key: labels.quota,
       value: (datum: Record<string, unknown>) =>
@@ -1113,6 +1113,7 @@ function tooltipMetricLines(
       visible: (datum: Record<string, unknown>) => hasMetric(datum, 'share'),
     },
   ]
+  return labels.quota ? rows : rows.slice(1)
 }
 
 export function buildFlowSankeySpec(

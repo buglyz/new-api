@@ -55,9 +55,13 @@ export async function getUserQuotaDates(
 export async function getPersonalUsageSummary() {
   const res = await api.get<{
     success: boolean
-    data: PersonalUsageSummary
+    message?: string
+    data?: PersonalUsageSummary
   }>('/api/data/self/summary')
-  return res.data
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to load token usage')
+  }
+  return { ...res.data, data: res.data.data }
 }
 
 // ----------------------------------------------------------------------------

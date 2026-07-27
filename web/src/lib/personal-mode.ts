@@ -101,7 +101,8 @@ export function getPersonalModeRedirect(
   if (consoleDisabled) return authenticated ? '/dashboard' : '/sign-in'
   if (
     isPathOrChild(path, '/system-settings/billing') ||
-    isPathOrChild(path, '/system-settings/content')
+    (isPathOrChild(path, '/system-settings/content') &&
+      path !== '/system-settings/content/dashboard')
   ) {
     return '/system-settings/site'
   }
@@ -110,6 +111,15 @@ export function getPersonalModeRedirect(
     path !== '/system-settings/auth/passkey'
   ) {
     return '/system-settings/auth/passkey'
+  }
+  if (
+    path === '/system-settings/site/header-navigation' ||
+    path === '/system-settings/site/sidebar-modules'
+  ) {
+    return '/system-settings/site'
+  }
+  if (path === '/system-settings/models/grok') {
+    return '/system-settings/models/routing-reliability'
   }
 
   return null
@@ -138,7 +148,19 @@ export function prioritizePersonalModeActions<T extends { to: string }>(
 export function isPersonalModeNavPathDisabled(url: string): boolean {
   if (HIDDEN_ROOT_NAV_PATHS.has(normalizePath(url))) return true
   if (isPathOrChild(url, '/system-settings/billing')) return true
-  if (isPathOrChild(url, '/system-settings/content')) return true
+  if (
+    isPathOrChild(url, '/system-settings/content') &&
+    normalizePath(url) !== '/system-settings/content/dashboard'
+  ) {
+    return true
+  }
+  if (
+    normalizePath(url) === '/system-settings/site/header-navigation' ||
+    normalizePath(url) === '/system-settings/site/sidebar-modules' ||
+    normalizePath(url) === '/system-settings/models/grok'
+  ) {
+    return true
+  }
   return (
     isPathOrChild(url, '/system-settings/auth') &&
     normalizePath(url) !== '/system-settings/auth/passkey'

@@ -191,3 +191,44 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
 }
+
+func TestDisablingDataExportFlushesAlreadyRecordedUsage(t *testing.T) {
+	truncateTables(t)
+	original := common.DataExportEnabled
+	originalOptionMap := common.OptionMap
+	common.DataExportEnabled = true
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap = make(map[string]string)
+	common.OptionMapRWMutex.Unlock()
+	CacheQuotaDataLock.Lock()
+	CacheQuotaData = make(map[string]*QuotaData)
+	CacheQuotaDataLock.Unlock()
+	t.Cleanup(func() {
+		common.DataExportEnabled = original
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = originalOptionMap
+		common.OptionMapRWMutex.Unlock()
+		CacheQuotaDataLock.Lock()
+		CacheQuotaData = make(map[string]*QuotaData)
+		CacheQuotaDataLock.Unlock()
+	})
+
+	LogQuotaData(QuotaDataLogParams{
+		UserID:    1,
+		Username:  "alice",
+		ModelName: "gpt-a",
+		CreatedAt: 3661,
+		TokenUsed: 40,
+	})
+
+	require.NoError(t, updateOptionMap("DataExportEnabled", "false"))
+	require.False(t, common.DataExportEnabled)
+
+	var total int64
+	require.NoError(t, DB.Table("quota_data").Select("COALESCE(SUM(token_used), 0)").Scan(&total).Error)
+	require.EqualValues(t, 40, total)
+	CacheQuotaDataLock.Lock()
+	cacheSize := len(CacheQuotaData)
+	CacheQuotaDataLock.Unlock()
+	require.Zero(t, cacheSize)
+}

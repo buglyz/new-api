@@ -30,6 +30,23 @@ export interface PersonalUsageSparklines {
   requests: number[]
 }
 
+export function formatTokenCount(
+  value: string | number | null | undefined,
+  locales?: Intl.LocalesArgument
+): string {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) return '-'
+    return Intl.NumberFormat(locales, { maximumFractionDigits: 0 }).format(
+      value
+    )
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) return '-'
+
+  return Intl.NumberFormat(locales, { maximumFractionDigits: 0 }).format(
+    BigInt(value)
+  )
+}
+
 export function calculatePersonalUsage(
   data: QuotaDataItem[]
 ): PersonalUsageMetrics {

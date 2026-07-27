@@ -34,7 +34,9 @@ export interface QuotaDataItem {
 }
 
 export interface PersonalUsageSummary {
-  total_tokens: number
+  last_24h_tokens: string
+  total_tokens: string
+  tokens_tracked: boolean
 }
 
 export interface FlowQuotaDataItem {
