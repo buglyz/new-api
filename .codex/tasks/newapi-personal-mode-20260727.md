@@ -1,7 +1,7 @@
 # NewAPI Personal Failover Mode
 
 Date: 2026-07-27
-Status: Source complete
+Status: Operations visibility verified
 
 ## Objective
 
@@ -30,16 +30,27 @@ subscription, redemption, and public marketing surfaces while the mode is on.
 - [x] Complete focused and full Go tests after `web/dist` exists.
 - [x] Review the final diff and clean generated artifacts.
 
+## Operations Visibility Follow-up
+
+- [x] Add a full-pagination channel attention view with probe freshness.
+- [x] Surface retry chains and request-correlated log navigation.
+- [x] Add full-pagination API key risk filtering without revealing keys.
+- [x] Add a personal operations overview using bounded, low-frequency queries.
+- [x] Re-run frontend checks/build before the full Go test suite.
+- [x] Push the verified commit and record the Docker Action result externally.
+
 ## Verification
 
-- `bun test src/lib/__tests__/personal-mode.test.ts`: 9 passed.
-- `bun run typecheck`: passed.
-- OXLint on every changed and new frontend source file: passed.
-- `bun run format:check`: passed across 1,051 files.
-- `bun run build:check`: passed; production assets built successfully.
-- `go test -p 1 ./middleware ./controller`: passed.
-- `GOMAXPROCS=1 go test -p 1 ./...`: passed after the frontend build.
+- Personal operations tests: 23 passed across pagination, channel attention,
+  API key risks, failover traces, and standard-mode decision coverage.
+- `bun run i18n:sync`: all seven locale key sets complete; Simplified and
+  Traditional Chinese operations copy translated.
+- Changed-file OXLint and the 1,069-file protected-header format check passed.
+- `bun run typecheck` and the production `bun run build` passed.
+- `GOMAXPROCS=1 go test -p 1 ./...`: passed after the final frontend build.
 - `git diff --check`: passed.
+- Size review: every new TS/TSX file is within the workspace limit; modified
+  upstream files that remain over the limit were already over at the baseline.
 - Personal Docker workflow targets `ghcr.io/buglyz/new-api` for amd64/arm64
   with `latest`, `main`, and immutable commit-SHA tags.
 

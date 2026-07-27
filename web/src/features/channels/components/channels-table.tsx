@@ -52,6 +52,7 @@ import {
   CHANNEL_STATUS,
   CHANNEL_STATUS_OPTIONS,
 } from '../constants'
+import { useChannelAttentionView } from '../hooks/use-channel-attention-view'
 import {
   channelsQueryKeys,
   aggregateChannelsByTag,
@@ -60,7 +61,13 @@ import {
   getChannelTypeIcon,
   getChannelTypeLabel,
 } from '../lib'
-import type { Channel, ChannelSortBy } from '../types'
+import type {
+  Channel,
+  ChannelSortBy,
+  GetChannelsParams,
+  SearchChannelsParams,
+} from '../types'
+import { ChannelAttentionControls } from './channel-attention-controls'
 import { ChannelCard } from './channel-card'
 import { useChannelsColumns } from './channels-columns'
 import { useChannels } from './channels-provider'
@@ -218,80 +225,64 @@ export function ChannelsTable() {
     [groupsData]
   )
 
+  const channelListParams: GetChannelsParams = {
+    group:
+      groupFilter.length > 0 && !groupFilter.includes('all')
+        ? groupFilter[0]
+        : undefined,
+    status:
+      statusFilter.length > 0 && !statusFilter.includes('all')
+        ? statusFilter[0]
+        : undefined,
+    type:
+      typeFilter.length > 0 && !typeFilter.includes('all')
+        ? Number(typeFilter[0])
+        : undefined,
+    tag_mode: enableTagMode,
+    id_sort: idSort,
+    ...sortParams,
+  }
+  const channelQueryParams: SearchChannelsParams = {
+    keyword: globalFilter,
+    model: modelFilter,
+    ...channelListParams,
+  }
+  const attentionView = useChannelAttentionView({
+    params: shouldSearch ? channelQueryParams : channelListParams,
+    shouldSearch,
+    pagination,
+    resetPage: () => onPaginationChange({ ...pagination, pageIndex: 0 }),
+  })
+
   // Fetch channels data
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data, isLoading, isFetching } = useQuery({
     queryKey: channelsQueryKeys.list({
-      keyword: globalFilter,
-      model: modelFilter,
-      group:
-        groupFilter.length > 0 && !groupFilter.includes('all')
-          ? groupFilter[0]
-          : undefined,
-      status:
-        statusFilter.length > 0 && !statusFilter.includes('all')
-          ? statusFilter[0]
-          : undefined,
-      type:
-        typeFilter.length > 0 && !typeFilter.includes('all')
-          ? Number(typeFilter[0])
-          : undefined,
-      tag_mode: enableTagMode,
-      id_sort: idSort,
-      ...sortParams,
+      ...channelQueryParams,
       p: pagination.pageIndex + 1,
       page_size: pagination.pageSize,
     }),
     queryFn: async () => {
       if (shouldSearch) {
         return searchChannels({
-          keyword: globalFilter,
-          model: modelFilter,
-          group:
-            groupFilter.length > 0 && !groupFilter.includes('all')
-              ? groupFilter[0]
-              : undefined,
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          type:
-            typeFilter.length > 0 && !typeFilter.includes('all')
-              ? Number(typeFilter[0])
-              : undefined,
-          tag_mode: enableTagMode,
-          id_sort: idSort,
-          ...sortParams,
+          ...channelQueryParams,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
       } else {
         return getChannels({
-          group:
-            groupFilter.length > 0 && !groupFilter.includes('all')
-              ? groupFilter[0]
-              : undefined,
-          status:
-            statusFilter.length > 0 && !statusFilter.includes('all')
-              ? statusFilter[0]
-              : undefined,
-          type:
-            typeFilter.length > 0 && !typeFilter.includes('all')
-              ? Number(typeFilter[0])
-              : undefined,
-          tag_mode: enableTagMode,
-          id_sort: idSort,
-          ...sortParams,
+          ...channelListParams,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
       }
     },
     placeholderData: (previousData) => previousData,
+    enabled: !attentionView.attentionOnly,
   })
 
   // Apply tag aggregation if tag mode is enabled
-  const channels = useMemo(() => {
+  const standardChannels = useMemo(() => {
     const rawChannels = data?.data?.items || []
 
     if (enableTagMode && rawChannels.length > 0) {
@@ -301,11 +292,20 @@ export function ChannelsTable() {
     return rawChannels
   }, [data, enableTagMode])
 
-  const totalCount = data?.data?.total || 0
+  const channels = attentionView.attentionOnly
+    ? attentionView.channels
+    : standardChannels
+  const totalCount = attentionView.attentionOnly
+    ? attentionView.attentionCount
+    : data?.data?.total || 0
   const typeCounts = data?.data?.type_counts
 
   // Columns configuration
-  const columns = useChannelsColumns({ enableSelection: batchMode })
+  const columns = useChannelsColumns({
+    enableSelection: batchMode,
+    showAttention: attentionView.attentionOnly,
+    attentionNowSeconds: attentionView.nowSeconds,
+  })
 
   // React Table instance
   const { table } = useDataTable({
@@ -411,8 +411,12 @@ export function ChannelsTable() {
     <DataTablePage
       table={table}
       columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
+      isLoading={
+        attentionView.attentionOnly ? attentionView.isLoading : isLoading
+      }
+      isFetching={
+        attentionView.attentionOnly ? attentionView.isFetching : isFetching
+      }
       emptyTitle={t('No Channels Found')}
       emptyDescription={t(
         'No channels available. Create your first channel to get started.'
@@ -462,24 +466,36 @@ export function ChannelsTable() {
           },
         ],
         preActions: (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant='ghost'
-                  size='icon'
-                  onClick={() => setSensitiveVisible(!sensitiveVisible)}
-                  aria-label={sensitiveVisible ? t('Hide') : t('Show')}
-                  className='text-muted-foreground hover:text-foreground size-8'
-                />
-              }
-            >
-              {sensitiveVisible ? <Eye /> : <EyeOff />}
-            </TooltipTrigger>
-            <TooltipContent>
-              {sensitiveVisible ? t('Hide') : t('Show')}
-            </TooltipContent>
-          </Tooltip>
+          <>
+            {attentionView.personalMode && (
+              <ChannelAttentionControls
+                attentionOnly={attentionView.attentionOnly}
+                attentionCount={attentionView.attentionCount}
+                isFetching={attentionView.isFetching}
+                updatedAt={attentionView.updatedAt}
+                onModeChange={attentionView.changeMode}
+                onRefresh={attentionView.refresh}
+              />
+            )}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    onClick={() => setSensitiveVisible(!sensitiveVisible)}
+                    aria-label={sensitiveVisible ? t('Hide') : t('Show')}
+                    className='text-muted-foreground hover:text-foreground size-8'
+                  />
+                }
+              >
+                {sensitiveVisible ? <Eye /> : <EyeOff />}
+              </TooltipTrigger>
+              <TooltipContent>
+                {sensitiveVisible ? t('Hide') : t('Show')}
+              </TooltipContent>
+            </Tooltip>
+          </>
         ),
       }}
       getRowClassName={(row, { isMobile }) => {

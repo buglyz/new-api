@@ -77,6 +77,7 @@ import {
 } from '../lib'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
+import { ChannelAttentionBadges } from './channel-attention-badges'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -546,11 +547,15 @@ function BalanceCell({ channel }: { channel: Channel }) {
 export function useChannelsColumns(
   options: {
     enableSelection?: boolean
+    showAttention?: boolean
+    attentionNowSeconds?: number
   } = {}
 ): ColumnDef<Channel>[] {
   const { t, i18n } = useTranslation()
   const { sensitiveVisible } = useChannels()
   const enableSelection = options.enableSelection ?? true
+  const showAttention = options.showAttention ?? false
+  const attentionNowSeconds = options.attentionNowSeconds ?? 0
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   // The column definitions only depend on the translation function, the active
   // locale, and sensitive-data visibility. Memoizing keeps the array (and every
@@ -695,6 +700,12 @@ export function useChannelsColumns(
                     </TooltipProvider>
                   )}
                   <UpstreamUpdateTags channel={channel} />
+                  {showAttention && (
+                    <ChannelAttentionBadges
+                      channel={channel}
+                      nowSeconds={attentionNowSeconds}
+                    />
+                  )}
                 </div>
                 {channel.remark && (
                   <TooltipProvider delay={200}>
@@ -1184,6 +1195,13 @@ export function useChannelsColumns(
         meta: { pinned: 'right' as const },
       },
     ],
-    [enableSelection, t, locale, sensitiveVisible]
+    [
+      attentionNowSeconds,
+      enableSelection,
+      locale,
+      sensitiveVisible,
+      showAttention,
+      t,
+    ]
   )
 }

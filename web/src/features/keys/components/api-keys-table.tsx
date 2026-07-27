@@ -52,7 +52,10 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
+import { useApiKeyAttentionView } from '../hooks/use-api-key-attention-view'
 import type { ApiKey } from '../types'
+import { ApiKeyAttentionBadges } from './api-key-attention-badges'
+import { ApiKeyAttentionControls } from './api-key-attention-controls'
 import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
@@ -96,9 +99,13 @@ function ApiKeysMobileSkeleton() {
 function ApiKeysMobileList({
   table,
   isLoading,
+  showAttention,
+  nowSeconds,
 }: {
   table: TanstackTable<ApiKey>
   isLoading: boolean
+  showAttention: boolean
+  nowSeconds: number
 }) {
   const { t } = useTranslation()
   const rows = table.getRowModel().rows
@@ -158,6 +165,10 @@ function ApiKeysMobileList({
               )}
             </div>
 
+            {showAttention && (
+              <ApiKeyAttentionBadges apiKey={apiKey} nowSeconds={nowSeconds} />
+            )}
+
             <div className='flex min-w-0 items-center justify-between gap-2'>
               <div className='min-w-0 flex-1 [&_button:first-child]:max-w-full [&_button:first-child]:truncate [&_button:first-child]:px-0'>
                 <ApiKeyCell apiKey={apiKey} />
@@ -190,7 +201,6 @@ export function ApiKeysTable() {
   const { t } = useTranslation()
   const { refreshTrigger } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
-  const columns = useApiKeysColumns(now)
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -229,6 +239,17 @@ export function ApiKeysTable() {
     onColumnFiltersChange,
   })
   const shouldSearch = Boolean(globalFilter?.trim() || tokenFilter.trim())
+  const statusFilter = columnFilters.find((filter) => filter.id === 'status')
+    ?.value as string[] | undefined
+  const attentionView = useApiKeyAttentionView({
+    keyword: globalFilter,
+    token: tokenFilter,
+    status: statusFilter?.[0],
+    refreshTrigger,
+    pagination,
+    resetPage: () => onPaginationChange({ ...pagination, pageIndex: 0 }),
+  })
+  const columns = useApiKeysColumns(now, attentionView.personalMode)
 
   // Fetch data with React Query
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
@@ -272,9 +293,15 @@ export function ApiKeysTable() {
       }
     },
     placeholderData: (previousData) => previousData,
+    enabled: !attentionView.attentionOnly,
   })
 
-  const apiKeys = data?.items || []
+  const apiKeys = attentionView.attentionOnly
+    ? attentionView.keys
+    : data?.items || []
+  const totalCount = attentionView.attentionOnly
+    ? attentionView.attentionCount
+    : data?.total || 0
 
   const { table } = useDataTable({
     data: apiKeys,
@@ -289,7 +316,7 @@ export function ApiKeysTable() {
     onGlobalFilterChange,
     onColumnFiltersChange,
     manualPagination: true,
-    totalCount: data?.total || 0,
+    totalCount,
     ensurePageInRange,
   })
 
@@ -297,8 +324,12 @@ export function ApiKeysTable() {
     <DataTablePage
       table={table}
       columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
+      isLoading={
+        attentionView.attentionOnly ? attentionView.isLoading : isLoading
+      }
+      isFetching={
+        attentionView.attentionOnly ? attentionView.isFetching : isFetching
+      }
       emptyTitle={t('No API Keys Found')}
       emptyDescription={t(
         'No API keys available. Create your first API key to get started.'
@@ -324,8 +355,24 @@ export function ApiKeysTable() {
             singleSelect: true,
           },
         ],
+        preActions: attentionView.personalMode ? (
+          <ApiKeyAttentionControls
+            attentionOnly={attentionView.attentionOnly}
+            attentionCount={attentionView.attentionCount}
+            onModeChange={attentionView.changeMode}
+          />
+        ) : undefined,
       }}
-      mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
+      mobile={
+        <ApiKeysMobileList
+          table={table}
+          isLoading={
+            attentionView.attentionOnly ? attentionView.isLoading : isLoading
+          }
+          showAttention={attentionView.personalMode}
+          nowSeconds={attentionView.nowSeconds}
+        />
+      }
       getRowClassName={(row) =>
         isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
       }

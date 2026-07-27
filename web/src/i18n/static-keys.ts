@@ -104,6 +104,18 @@ export const STATIC_I18N_KEYS = [
   'Successfully deleted {{count}} API key(s)',
   'Enter API key for this channel',
 
+  // Personal operations attention labels
+  'Automatically disabled',
+  'All multi-key credentials unavailable',
+  'Never probed',
+  'Probe older than 24 hours',
+  'Probe response over 5 seconds',
+  'Expires within 7 days',
+  'Quota exhausted',
+  'Unused for over 90 days',
+  'No expiry and unlimited quota',
+  'No model restrictions',
+
   // Users
   'Root',
   'Deleted',

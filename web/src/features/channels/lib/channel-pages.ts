@@ -16,14 +16,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// Re-export all library functions
-export * from './channel-actions'
-export * from './channel-attention'
-export * from './channel-field-update'
-export * from './advanced-custom'
-export * from './channel-form-errors'
-export * from './channel-form'
-export * from './channel-type-config'
-export * from './channel-utils'
-export * from './multi-key-utils'
-export * from './model-mapping-validation'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+
+import { getChannels, searchChannels } from '../api'
+import type { Channel, SearchChannelsParams } from '../types'
+
+export async function fetchAllChannelPages(
+  params: SearchChannelsParams,
+  shouldSearch: boolean
+): Promise<Channel[]> {
+  return fetchAllPages({
+    fetchPage: (page, pageSize) => {
+      const pageParams = {
+        ...params,
+        tag_mode: false,
+        p: page,
+        page_size: pageSize,
+      }
+      return shouldSearch ? searchChannels(pageParams) : getChannels(pageParams)
+    },
+    getId: (channel) => channel.id,
+    loadError: 'Failed to load all channels',
+    incompleteError: 'Channel pagination ended before the reported total',
+  })
+}

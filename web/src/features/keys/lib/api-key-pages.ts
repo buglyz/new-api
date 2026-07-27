@@ -16,14 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-// Re-export all library functions
-export * from './channel-actions'
-export * from './channel-attention'
-export * from './channel-field-update'
-export * from './advanced-custom'
-export * from './channel-form-errors'
-export * from './channel-form'
-export * from './channel-type-config'
-export * from './channel-utils'
-export * from './multi-key-utils'
-export * from './model-mapping-validation'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+
+import { getApiKeys, searchApiKeys } from '../api'
+import type { ApiKey } from '../types'
+
+export async function fetchAllApiKeyPages(params: {
+  keyword?: string
+  token?: string
+}): Promise<ApiKey[]> {
+  const shouldSearch = Boolean(params.keyword?.trim() || params.token?.trim())
+  return fetchAllPages({
+    fetchPage: (page, pageSize) =>
+      shouldSearch
+        ? searchApiKeys({ ...params, p: page, size: pageSize })
+        : getApiKeys({ p: page, size: pageSize }),
+    getId: (apiKey) => apiKey.id,
+    loadError: 'Failed to load all API keys',
+    incompleteError: 'API key pagination ended before the reported total',
+  })
+}

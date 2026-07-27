@@ -59,11 +59,14 @@ import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Label } from '@/components/ui/label'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { useStatus } from '@/hooks/use-status'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
+import { isPersonalModeEnabled } from '@/lib/personal-mode'
 import { cn } from '@/lib/utils'
 
 import type { UsageLog } from '../../data/schema'
+import { getFailoverTrace } from '../../lib/failover'
 import {
   parseLogOther,
   getParamOverrideActionLabel,
@@ -478,6 +481,8 @@ interface DetailsDialogProps {
 
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
+  const { status } = useStatus()
+  const personalMode = isPersonalModeEnabled(status)
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
@@ -601,9 +606,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
     props.log.type !== 6 &&
     (other?.request_path || conversionChain.length > 0)
 
-  const useChannel = other?.admin_info?.use_channel
-  const channelChain =
-    useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  const failoverTrace = getFailoverTrace(props.log)
+  const rawUseChannel = other?.admin_info?.use_channel
+  const standardChannelChain = Array.isArray(rawUseChannel)
+    ? rawUseChannel.map(String).filter(Boolean).join(' → ')
+    : ''
+  const channelChain = personalMode
+    ? failoverTrace?.attemptChannelIds.join(' → ')
+    : standardChannelChain || undefined
   let reasoningEffortVariant: StatusBadgeProps['variant'] = 'green'
   if (other?.reasoning_effort === 'high') {
     reasoningEffortVariant = 'orange'
@@ -677,6 +687,24 @@ export function DetailsDialog(props: DetailsDialogProps) {
           {channelChain && props.isAdmin && (
             <DetailRow label={t('Retry Chain')} value={channelChain} mono />
           )}
+
+          {personalMode && props.isAdmin && failoverTrace && (
+            <DetailRow
+              label={t('Retry Count')}
+              value={String(failoverTrace.retryCount)}
+              mono
+            />
+          )}
+
+          {personalMode &&
+            props.isAdmin &&
+            failoverTrace?.finalSuccessfulChannelId != null && (
+              <DetailRow
+                label={t('Final Successful Channel')}
+                value={`#${failoverTrace.finalSuccessfulChannelId}`}
+                mono
+              />
+            )}
 
           {props.log.token_name && (
             <DetailRow label={t('Token')} value={props.log.token_name} mono />

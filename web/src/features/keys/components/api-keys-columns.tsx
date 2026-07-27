@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 
 import { API_KEY_STATUSES } from '../constants'
 import type { ApiKey } from '../types'
+import { ApiKeyAttentionBadges } from './api-key-attention-badges'
 import { ApiKeyTimestampCell } from './api-key-timestamp-cell'
 import {
   ApiKeyCell,
@@ -73,7 +74,10 @@ function useGroupRatios(): Record<string, number> {
   return data ?? {}
 }
 
-export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
+export function useApiKeysColumns(
+  now: number,
+  showAttention: boolean = false
+): ColumnDef<ApiKey>[] {
   const { t, i18n } = useTranslation()
   const groupRatios = useGroupRatios()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
@@ -131,6 +135,22 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       size: 120,
       meta: { mobileBadge: true },
     },
+    ...(showAttention
+      ? [
+          {
+            id: 'attention',
+            header: t('Risk'),
+            cell: ({ row }) => (
+              <ApiKeyAttentionBadges
+                apiKey={row.original}
+                nowSeconds={now / 1000}
+              />
+            ),
+            enableSorting: false,
+            size: 170,
+          } satisfies ColumnDef<ApiKey>,
+        ]
+      : []),
     {
       id: 'key',
       accessorKey: 'key',
