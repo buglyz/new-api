@@ -1,7 +1,7 @@
 # NewAPI Personal Failover Mode
 
 Date: 2026-07-27
-Status: Reliability control loop locally verified; pending push and Docker verification
+Status: Reliability control loop published and deployed
 
 ## Objective
 
@@ -77,7 +77,7 @@ subscription, redemption, and public marketing surfaces while the mode is on.
   add a conflict-visible upstream synchronization workflow.
 - [x] Re-run frontend checks/build before the complete Go test suite and review
   standard-mode behavior.
-- [ ] Push and verify the Docker workflow.
+- [x] Push and verify the Docker workflow.
 
 ### Reliability Policy
 
@@ -104,3 +104,13 @@ subscription, redemption, and public marketing surfaces while the mode is on.
 - `copyright:check` still identifies the untouched upstream
   `web/src/features/channels/lib/channel-field-update.ts`; new frontend files
   retain protected headers.
+- Feature commit `f23fb2583c2152c19d5a1f46ab1119434b72cc4f` was pushed to
+  `buglyz/new-api` `main`.
+- Docker Action `30264459228` succeeded for amd64/arm64 with manifest digest
+  `sha256:0fd1a68326b3afcd36ca605c7b01a623d6648204c65596ce38f3ce8716eb7751`
+  and no annotations.
+- After an explicit user request, the immutable SHA image was deployed to the
+  existing `/opt/newapi` Compose service. Backup
+  `/opt/newapi/backups/pre-fork-deploy-20260727-202643` passed `quick_check`;
+  the new container is healthy with version `main-f23fb25`, and Caddy was not
+  reloaded or restarted.
