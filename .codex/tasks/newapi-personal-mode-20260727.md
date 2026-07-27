@@ -1,7 +1,7 @@
 # NewAPI Personal Failover Mode
 
 Date: 2026-07-27
-Status: Personal usage accuracy follow-up verified; pending publish
+Status: Personal usage accuracy follow-up published
 
 ## Objective
 
@@ -99,7 +99,7 @@ subscription, redemption, and public marketing surfaces while the mode is on.
   data, large integer formatting, and responsive card layout.
 - [x] Re-run the required frontend and backend verification sequence and review
   standard-mode behavior.
-- [ ] Push the verified source and verify the Docker workflow.
+- [x] Push the verified source and verify the Docker workflow.
 
 ### Personal Usage Verification
 
@@ -119,6 +119,9 @@ subscription, redemption, and public marketing surfaces while the mode is on.
 - `GOMAXPROCS=1 go test -p 1 ./...` passed after the frontend build.
 - `git diff --check`, `gofmt`, changed-file size review, sensitive-data review,
   and the standard-mode branch review passed.
+- Feature commit `0c6d45746fb362d8901a97437d7e7906b2eca429` was pushed to
+  `buglyz/new-api` `main`. Docker Action `30311816983` and job `90128878315`
+  succeeded in 19m39s. No deployment was performed.
 
 ### Reliability Policy
 
