@@ -5278,6 +5278,10 @@
     "Expiry, quota, inactivity, unlimited access, and model restriction warnings.": "到期、额度、长期未使用、无限访问和模型限制告警。",
     "Observed in the latest 50 logs from the last 24 hours.": "来自最近 24 小时内最新 50 条日志的观测。",
     "Unavailable": "暂不可用",
-    "Risk": "风险"
+    "Risk": "风险",
+    "Last 24h tokens": "最近 24 小时 Token",
+    "Tokens consumed in the last 24 hours": "最近 24 小时消耗的 Token",
+    "Total tokens consumed": "累计消耗的 Token",
+    "Monitor token usage and request volume": "监控 Token 用量和请求量"
   }
 }

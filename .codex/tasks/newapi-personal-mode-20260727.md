@@ -79,6 +79,25 @@ subscription, redemption, and public marketing surfaces while the mode is on.
   standard-mode behavior.
 - [x] Push and verify the Docker workflow.
 
+## Personal Usage Overview Follow-up
+
+- [x] Remove the personal operations dashboard section and its queries.
+- [x] Replace personal-mode currency and quota cards with real token totals.
+- [x] Preserve the upstream balance dashboard when personal mode is disabled.
+- [x] Add focused API and frontend aggregation tests.
+- [x] Re-run frontend checks/build before the complete Go test suite.
+
+### Personal Usage Verification
+
+- Personal-mode cards show last-24-hour tokens, recorded total tokens, and
+  request count; quota and currency values remain confined to standard mode.
+- Focused frontend tests: 11 passed across token aggregation and personal-mode
+  decisions.
+- `bun run typecheck`, changed-file OXLint, `bun run format:check`, i18n sync,
+  and the production frontend build passed.
+- `GOMAXPROCS=1 go test -p 1 ./...` passed after the frontend build.
+- `git diff --check` and changed-file size review passed.
+
 ### Reliability Policy
 
 - Temporary circuits are enabled only while `SelfUseModeEnabled` is true.

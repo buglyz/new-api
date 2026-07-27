@@ -36,6 +36,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { StatCard } from '../ui/stat-card'
+import { PersonalUsageSummaryCards } from './personal-usage-summary-cards'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
 
@@ -138,10 +139,19 @@ const HEALTH_CONFIG: Record<
 }
 
 export function SummaryCards() {
+  const { status } = useStatus()
+
+  if (isPersonalModeEnabled(status)) {
+    return <PersonalUsageSummaryCards />
+  }
+
+  return <StandardSummaryCards />
+}
+
+function StandardSummaryCards() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
   const { status, loading } = useStatus()
-  const personalMode = isPersonalModeEnabled(status)
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
@@ -346,12 +356,10 @@ export function SummaryCards() {
             </div>
           </div>
 
-          {!personalMode && (
-            <Button className='justify-between' render={<Link to='/wallet' />}>
-              <span>{t('Wallet')}</span>
-              <ArrowRight data-icon='inline-end' />
-            </Button>
-          )}
+          <Button className='justify-between' render={<Link to='/wallet' />}>
+            <span>{t('Wallet')}</span>
+            <ArrowRight data-icon='inline-end' />
+          </Button>
         </div>
       </div>
     </div>

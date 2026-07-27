@@ -85,6 +85,15 @@ func GetUserQuotaDates(c *gin.Context) {
 	return
 }
 
+func GetUserUsageSummary(c *gin.Context) {
+	summary, err := model.GetUserUsageSummary(c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, summary)
+}
+
 func GetAllFlowQuotaDates(c *gin.Context) {
 	startTimestamp, endTimestamp, ok := parseFlowQuotaTimeRange(c)
 	if !ok {
