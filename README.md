@@ -44,6 +44,7 @@
 </p>
 
 <p align="center">
+  <a href="#personal-failover-fork">Personal Fork</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-key-features">Key Features</a> •
   <a href="#-deployment">Deployment</a> •
@@ -52,6 +53,38 @@
 </p>
 
 </div>
+
+## Personal Failover Fork
+
+> [!NOTE]
+> This repository is a personal-use extension of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). It preserves the upstream project identity, license, and standard mode while adding an operations-focused experience for one operator aggregating multiple low-SLA upstreams.
+
+[![Publish personal Docker image](https://github.com/buglyz/new-api/actions/workflows/personal-docker.yml/badge.svg?branch=main)](https://github.com/buglyz/new-api/actions/workflows/personal-docker.yml)
+
+Enable self-use mode during initial setup, or enable `SelfUseModeEnabled` in system settings, to activate the personal failover experience:
+
+- Keeps channels, models, groups, API keys, logs, performance, retries, channel affinity, automatic disable/recovery, Passkeys, 2FA, and system operations.
+- Hides and disables multi-user SaaS, registration/OAuth, billing/payment, subscription/redemption, promotion, check-in, and public marketing surfaces.
+- Adds a full-pagination channel attention view for automatic disablement, missing/stale/slow probes, and unavailable multi-key credentials.
+- Surfaces observed retry chains with retry count, attempted channel IDs, final successful channel, request ID, and request-correlated log navigation.
+- Adds masked API key risk warnings and a bounded personal operations overview without inventing channel success rates or failure reasons.
+
+When `SelfUseModeEnabled` is off, upstream navigation, APIs, and compact log presentation remain unchanged.
+
+### Personal Docker Image
+
+```bash
+docker pull ghcr.io/buglyz/new-api:latest
+```
+
+- Platforms: `linux/amd64`, `linux/arm64`
+- Rolling tags: `latest`, `main`
+- Immutable tags: `sha-<full-commit-sha>`
+- Published with SBOM and provenance attestations
+
+Use the upstream deployment instructions below and replace the image with `ghcr.io/buglyz/new-api:latest`. Back up the database before replacing an existing deployment image.
+
+---
 
 ## 📝 Project Description
 

@@ -44,6 +44,7 @@
 </p>
 
 <p align="center">
+  <a href="#个人故障转移版本">个人版本</a> •
   <a href="#-快速开始">快速开始</a> •
   <a href="#-主要特性">主要特性</a> •
   <a href="#-部署">部署</a> •
@@ -52,6 +53,38 @@
 </p>
 
 </div>
+
+## 个人故障转移版本
+
+> [!NOTE]
+> 本仓库是在 [QuantumNous/new-api](https://github.com/QuantumNous/new-api) 基础上维护的个人使用扩展。它保留上游项目身份、许可证和标准模式，并为单人聚合多个低 SLA 上游提供偏运维的使用体验。
+
+[![发布个人 Docker 镜像](https://github.com/buglyz/new-api/actions/workflows/personal-docker.yml/badge.svg?branch=main)](https://github.com/buglyz/new-api/actions/workflows/personal-docker.yml)
+
+在首次初始化时选择自用模式，或在系统设置中启用 `SelfUseModeEnabled`，即可启用个人故障转移体验：
+
+- 保留渠道、模型、分组、API Key、日志、性能、重试、渠道亲和、自动禁用/恢复、Passkey、2FA 和系统运维能力。
+- 隐藏并禁用多用户 SaaS、注册/OAuth、计费/支付、订阅/兑换、推广、签到和公开营销功能。
+- 提供覆盖完整分页的渠道“需关注”视图，识别自动禁用、未探测、探测过期、探测响应过慢和多 Key 全部不可用。
+- 明显展示已观测到的重试链、重试次数、尝试渠道 ID、最终成功渠道、request ID，并支持按 request ID 查看相关日志。
+- 提供仅使用遮罩 Key 的 API Key 风险提示和有界、低频的个人运维概览，不伪造渠道成功率或失败原因。
+
+关闭 `SelfUseModeEnabled` 后，上游原有导航、API 和紧凑日志展示保持不变。
+
+### 个人 Docker 镜像
+
+```bash
+docker pull ghcr.io/buglyz/new-api:latest
+```
+
+- 平台：`linux/amd64`、`linux/arm64`
+- 滚动标签：`latest`、`main`
+- 不可变标签：`sha-<完整提交哈希>`
+- 镜像附带 SBOM 和 provenance attestations
+
+部署参数继续使用下方上游说明，只需将镜像替换为 `ghcr.io/buglyz/new-api:latest`。替换已有部署镜像前必须先备份数据库。
+
+---
 
 ## 📝 项目说明
 
