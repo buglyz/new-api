@@ -85,6 +85,7 @@ import {
   isTimingLogType,
 } from '../../lib/utils'
 import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
+import { RelayAttemptDetails } from '../relay-attempt-details'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -692,6 +693,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
             <DetailRow
               label={t('Retry Count')}
               value={String(failoverTrace.retryCount)}
+              mono
+            />
+          )}
+
+          {personalMode && props.isAdmin && failoverTrace && (
+            <DetailRow
+              label={t('Attempt Outcomes')}
+              value={<RelayAttemptDetails trace={failoverTrace} />}
               mono
             />
           )}

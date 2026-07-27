@@ -91,6 +91,9 @@ func TestPersonalModeMiddleware(t *testing.T) {
 		router.GET("/api/operational", PersonalModeAdmin(), func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"success": true})
 		})
+		router.GET("/api/personal-only", PersonalModeOnly(), func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"success": true})
+		})
 		router.PUT("/api/option/", PersonalModeOption(), func(c *gin.Context) {
 			var request struct {
 				Key string `json:"key"`
@@ -144,6 +147,24 @@ func TestPersonalModeMiddleware(t *testing.T) {
 		newRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/operational", nil))
 
 		assert.Equal(t, http.StatusUnauthorized, response.Code)
+	})
+
+	t.Run("personal-only endpoint is unavailable when mode is off", func(t *testing.T) {
+		operation_setting.SelfUseModeEnabled = false
+		response := httptest.NewRecorder()
+		newRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/personal-only", nil))
+
+		assert.Equal(t, http.StatusForbidden, response.Code)
+		assert.Contains(t, response.Body.String(), PersonalModeDisabledCode)
+	})
+
+	t.Run("personal-only endpoint is available when mode is on", func(t *testing.T) {
+		operation_setting.SelfUseModeEnabled = true
+		response := httptest.NewRecorder()
+		newRouter().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/personal-only", nil))
+
+		assert.Equal(t, http.StatusOK, response.Code)
+		assert.JSONEq(t, `{"success":true}`, response.Body.String())
 	})
 
 	t.Run("mode on blocks commercial option keys without blocking other settings", func(t *testing.T) {

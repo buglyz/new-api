@@ -68,6 +68,10 @@
 - 提供覆盖完整分页的渠道“需关注”视图，识别自动禁用、未探测、探测过期、探测响应过慢和多 Key 全部不可用。
 - 明显展示已观测到的重试链、重试次数、尝试渠道 ID、最终成功渠道、request ID，并支持按 request ID 查看相关日志。
 - 提供仅使用遮罩 Key 的 API Key 风险提示和有界、低频的个人运维概览，不伪造渠道成功率或失败原因。
+- 记录不含敏感正文的逐次尝试结果，并针对网络错误、HTTP 429/5xx 和 `model_not_found` 启用渠道与模型级临时熔断；401/403 和配置错误继续交给原有硬禁用规则。
+- 提供可靠性运维面板，支持有上限的批量探测、探测确认后的恢复、显式重置熔断，以及只读的优先级/权重路由预览。熔断状态只保存在当前进程，重启后清空。
+- 复用现有 Root 通知渠道发送去重后的自动熔断开启/恢复告警，不包含提示词、响应、密钥或原始上游错误。
+- 在 [`deploy/personal`](deploy/personal) 提供经过校验的 SQLite 备份、不可变镜像升级和显式回滚工具；每周上游同步只创建可审查 PR，不会自动合并 `main`。
 
 关闭 `SelfUseModeEnabled` 后，上游原有导航、API 和紧凑日志展示保持不变。
 
@@ -83,6 +87,8 @@ docker pull ghcr.io/buglyz/new-api:latest
 - 镜像附带 SBOM 和 provenance attestations
 
 部署参数继续使用下方上游说明，只需将镜像替换为 `ghcr.io/buglyz/new-api:latest`。替换已有部署镜像前必须先备份数据库。
+
+需要固定镜像 digest、校验 SQLite 备份并支持显式镜像/数据库回滚时，使用 [`deploy/personal/README.zh-CN.md`](deploy/personal/README.zh-CN.md) 中的模板。维护脚本不会自动执行。
 
 ---
 

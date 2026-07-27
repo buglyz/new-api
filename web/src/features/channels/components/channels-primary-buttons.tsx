@@ -65,6 +65,7 @@ import {
   handleUpdateAllBalances,
 } from '../lib'
 import { useChannels } from './channels-provider'
+import { PersonalReliabilityButton } from './personal-reliability-button'
 
 export function ChannelsPrimaryButtons() {
   const { t } = useTranslation()
@@ -107,6 +108,7 @@ export function ChannelsPrimaryButtons() {
   return (
     <>
       <div className='flex items-center gap-2'>
+        <PersonalReliabilityButton />
         {/* Desktop: Toggle switches visible */}
         <div className='hidden items-center gap-2 rounded-md border px-3 py-1.5 sm:flex'>
           <ListChecks className='text-muted-foreground h-4 w-4' />

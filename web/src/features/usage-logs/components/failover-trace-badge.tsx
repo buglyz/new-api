@@ -29,7 +29,11 @@ import {
 } from '@/components/ui/popover'
 
 import type { UsageLog } from '../data/schema'
-import { getFailoverTrace, getRelatedLogSearch } from '../lib/failover'
+import {
+  getAttemptOutcomeLabelKey,
+  getFailoverTrace,
+  getRelatedLogSearch,
+} from '../lib/failover'
 
 export function FailoverTraceBadge(props: { log: UsageLog }) {
   const { t } = useTranslation()
@@ -90,6 +94,30 @@ export function FailoverTraceBadge(props: { log: UsageLog }) {
               </>
             )}
           </dl>
+          <div className='border-t pt-2'>
+            <p className='text-muted-foreground mb-1'>
+              {t('Attempt Outcomes')}
+            </p>
+            <ol className='space-y-1'>
+              {trace.attempts.map((attempt) => (
+                <li
+                  key={`${attempt.channelId}-${attempt.index}`}
+                  className='flex flex-wrap items-baseline gap-x-1 font-mono'
+                >
+                  <span>#{attempt.channelId}</span>
+                  {attempt.outcome && (
+                    <span>{t(getAttemptOutcomeLabelKey(attempt.outcome))}</span>
+                  )}
+                  {attempt.statusCode != null && (
+                    <span>HTTP {attempt.statusCode}</span>
+                  )}
+                  {attempt.durationMs != null && (
+                    <span>{attempt.durationMs} ms</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
           {relatedLogSearch && (
             <Button
               variant='outline'

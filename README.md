@@ -68,6 +68,10 @@ Enable self-use mode during initial setup, or enable `SelfUseModeEnabled` in sys
 - Adds a full-pagination channel attention view for automatic disablement, missing/stale/slow probes, and unavailable multi-key credentials.
 - Surfaces observed retry chains with retry count, attempted channel IDs, final successful channel, request ID, and request-correlated log navigation.
 - Adds masked API key risk warnings and a bounded personal operations overview without inventing channel success rates or failure reasons.
+- Records privacy-limited per-attempt outcomes and applies channel-and-model temporary circuits for transport failures, HTTP 429/5xx, and `model_not_found`; 401/403 and configuration errors remain under the existing hard-disable rules.
+- Adds a reliability operations panel for bounded batch probing, probe-confirmed recovery, explicit circuit reset, and a read-only priority/weight route preview. Circuit state is process-local and clears on restart.
+- Reuses existing root notifications for deduplicated automatic circuit open/recovery transitions without including prompts, responses, keys, or raw upstream errors.
+- Provides verified SQLite backup, immutable-image upgrade, and explicit rollback tooling under [`deploy/personal`](deploy/personal), plus a weekly upstream-sync workflow that opens a reviewable PR and never merges `main` automatically.
 
 When `SelfUseModeEnabled` is off, upstream navigation, APIs, and compact log presentation remain unchanged.
 
@@ -83,6 +87,8 @@ docker pull ghcr.io/buglyz/new-api:latest
 - Published with SBOM and provenance attestations
 
 Use the upstream deployment instructions below and replace the image with `ghcr.io/buglyz/new-api:latest`. Back up the database before replacing an existing deployment image.
+
+For a digest-pinned SQLite deployment with verified backups and explicit image/database rollback, see [`deploy/personal/README.md`](deploy/personal/README.md). The maintenance script never runs automatically.
 
 ---
 

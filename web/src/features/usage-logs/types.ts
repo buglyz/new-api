@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
  * Type definitions for usage logs
  */
 import type { UsageLog } from './data/schema'
+import type { RelayAttemptTraceLog } from './relay-attempt-types'
 
 // ============================================================================
 // Log Category Types
@@ -117,6 +118,7 @@ export interface LogOtherData {
     is_multi_key?: boolean
     multi_key_index?: number
     use_channel?: Array<number | string>
+    relay_attempts?: RelayAttemptTraceLog
     local_count_tokens?: boolean
     usage_billing_path?: UsageBillingPath | string
     channel_affinity?: ChannelAffinityInfo

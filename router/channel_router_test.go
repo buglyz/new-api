@@ -27,6 +27,14 @@ func TestChannelDeleteRoutesUseSensitiveWritePermission(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPost, "/batch/tag", authz.ChannelWrite, controller.BatchSetChannelTag)
 }
 
+func TestPersonalReliabilityRoutesArePersonalOnly(t *testing.T) {
+	assertPersonalChannelRoute(t, http.MethodGet, "/reliability", authz.ChannelRead, controller.GetPersonalReliability)
+	assertPersonalChannelRoute(t, http.MethodPost, "/reliability/probe", authz.ChannelOperate, controller.ProbePersonalReliabilityChannels)
+	assertPersonalChannelRoute(t, http.MethodPost, "/reliability/recover", authz.ChannelOperate, controller.RecoverPersonalReliabilityChannels)
+	assertPersonalChannelRoute(t, http.MethodPost, "/reliability/reset", authz.ChannelOperate, controller.ResetPersonalReliabilityCircuits)
+	assertPersonalChannelRoute(t, http.MethodPost, "/reliability/simulate", authz.ChannelRead, controller.SimulatePersonalRoute)
+}
+
 func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -47,4 +55,17 @@ func assertChannelRoutePermission(t *testing.T, method string, path string, perm
 		}
 	}
 	t.Fatalf("route %s %s not found", method, path)
+}
+
+func assertPersonalChannelRoute(t *testing.T, method string, path string, permission authz.Permission, handler any) {
+	t.Helper()
+	for _, route := range channelPermissionRoutes {
+		if route.method == method && route.path == path {
+			assert.True(t, route.personalOnly)
+			assert.Equal(t, permission, route.permission)
+			assert.Equal(t, reflect.ValueOf(handler).Pointer(), reflect.ValueOf(route.handler).Pointer())
+			return
+		}
+	}
+	t.Fatalf("personal route %s %s not found", method, path)
 }

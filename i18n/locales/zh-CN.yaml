@@ -274,6 +274,15 @@ distributor.no_available_channel: "分组 {{.Group}} 下模型 {{.Model}} 无可
 distributor.invalid_midjourney_request: "无效的midjourney请求，{{.Error}}"
 distributor.invalid_request_parse_model: "无效的请求，无法解析模型"
 
+# 个人可靠性消息
+personal_reliability.invalid_payload: "可靠性操作请求内容无效"
+personal_reliability.channel_required: "请至少选择一个有效渠道"
+personal_reliability.batch_limit: "每次最多处理 {{.Limit}} 个渠道"
+personal_reliability.channel_not_found: "一个或多个所选渠道不存在"
+personal_reliability.task_active: "已有渠道测试任务正在等待或运行"
+personal_reliability.group_model_required: "必须提供有效的明确分组和模型"
+personal_reliability.explicit_group: "路由预览需要明确分组，不能使用 auto"
+
 # Custom OAuth provider messages
 custom_oauth.not_found: "自定义 OAuth 提供商不存在"
 custom_oauth.slug_empty: "标识符不能为空"

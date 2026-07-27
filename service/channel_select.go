@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -116,7 +117,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Auto selecting group: %s, priorityRetry: %d", autoGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannel(autoGroup, param.ModelName, priorityRetry, param.RequestPath)
+			channel, _ = getRandomSatisfiedChannel(param, autoGroup, priorityRetry)
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
 				// 当前分组没有该模型的可用渠道，尝试下一个分组
@@ -154,10 +155,61 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			break
 		}
 	} else {
-		channel, err = model.GetRandomSatisfiedChannel(param.TokenGroup, param.ModelName, param.GetRetry(), param.RequestPath)
+		channel, err = getRandomSatisfiedChannel(param, param.TokenGroup, param.GetRetry())
 		if err != nil {
 			return nil, param.TokenGroup, err
 		}
 	}
 	return channel, selectGroup, nil
+}
+
+func getRandomSatisfiedChannel(param *RetryParam, group string, retry int) (*model.Channel, error) {
+	if !operation_setting.SelfUseModeEnabled {
+		return model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath)
+	}
+
+	attempted := AttemptedChannelIDs(param.Ctx)
+	blocked := map[int]struct{}{}
+	available := func(channelID int) bool {
+		if _, used := attempted[channelID]; used {
+			return false
+		}
+		if _, unavailable := blocked[channelID]; unavailable {
+			return false
+		}
+		return PersonalCircuitCanAttempt(channelID, param.ModelName)
+	}
+
+	for {
+		channel, err := model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath, available)
+		if err != nil || channel == nil {
+			break
+		}
+		if ClaimPersonalCircuit(channel.Id, param.ModelName, false) {
+			return channel, nil
+		}
+		blocked[channel.Id] = struct{}{}
+	}
+
+	// If every otherwise eligible candidate is cooling down, reserve one
+	// half-open fallback. This keeps a personal gateway usable without allowing
+	// concurrent requests to stampede the same failing upstream.
+	fallbackFilter := func(channelID int) bool {
+		if _, used := attempted[channelID]; used {
+			return false
+		}
+		_, unavailable := blocked[channelID]
+		return !unavailable
+	}
+	for {
+		channel, err := model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath, fallbackFilter)
+		if err != nil || channel == nil {
+			return channel, err
+		}
+		if ClaimPersonalCircuit(channel.Id, param.ModelName, true) {
+			return channel, nil
+		}
+		blocked[channel.Id] = struct{}{}
+	}
+	return nil, nil
 }

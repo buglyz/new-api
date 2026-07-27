@@ -21,9 +21,21 @@ import { parseLogOther } from './format'
 
 export interface FailoverTrace {
   attemptChannelIds: number[]
+  attempts: FailoverAttempt[]
   retryCount: number
   finalSuccessfulChannelId: number | null
   requestId: string | null
+  result: string | null
+}
+
+export interface FailoverAttempt {
+  index: number
+  channelId: number
+  outcome: string | null
+  statusCode: number | null
+  errorCode: string | null
+  durationMs: number | null
+  retried: boolean
 }
 
 export interface RelatedLogSearch {
@@ -40,8 +52,70 @@ export interface ObservedFailover {
 
 const RELATED_LOG_WINDOW_SECONDS = 5 * 60
 
+const ATTEMPT_OUTCOME_LABELS: Record<string, string> = {
+  success: 'Success',
+  transport_error: 'Transport error',
+  rate_limited: 'Rate limited',
+  upstream_5xx: 'Upstream server error',
+  auth_error: 'Authentication error',
+  model_unavailable: 'Model unavailable',
+  channel_unavailable: 'Channel unavailable',
+  client_error: 'Client error',
+  local_error: 'Local error',
+  upstream_error: 'Upstream error',
+}
+
+export function getAttemptOutcomeLabelKey(outcome: string): string {
+  return ATTEMPT_OUTCOME_LABELS[outcome] ?? outcome
+}
+
 export function getFailoverTrace(log: UsageLog): FailoverTrace | null {
-  const rawChannels = parseLogOther(log.other)?.admin_info?.use_channel
+  const adminInfo = parseLogOther(log.other)?.admin_info
+  const structured = adminInfo?.relay_attempts
+  const structuredAttempts = Array.isArray(structured?.attempts)
+    ? structured.attempts.flatMap((attempt, attemptIndex) => {
+        const channelId = Number(attempt.channel_id)
+        if (!Number.isInteger(channelId) || channelId <= 0) return []
+        return [
+          {
+            index: finiteNumber(attempt.index) ?? attemptIndex,
+            channelId,
+            outcome:
+              typeof attempt.outcome === 'string' ? attempt.outcome : null,
+            statusCode: finiteNumber(attempt.status_code),
+            errorCode:
+              typeof attempt.error_code === 'string'
+                ? attempt.error_code
+                : null,
+            durationMs: finiteNumber(attempt.duration_ms),
+            retried: attempt.retried === true,
+          },
+        ]
+      })
+    : []
+  if (structuredAttempts.length > 1) {
+    const finalChannelId = Number(structured?.final_channel_id)
+    return {
+      attemptChannelIds: structuredAttempts.map((attempt) => attempt.channelId),
+      attempts: structuredAttempts,
+      retryCount: Math.max(
+        Number.isInteger(structured?.retry_count)
+          ? Number(structured?.retry_count)
+          : structuredAttempts.length - 1,
+        0
+      ),
+      finalSuccessfulChannelId:
+        structured?.result === 'success' &&
+        Number.isInteger(finalChannelId) &&
+        finalChannelId > 0
+          ? finalChannelId
+          : null,
+      requestId: structured?.request_id || log.request_id || null,
+      result: structured?.result || null,
+    }
+  }
+
+  const rawChannels = adminInfo?.use_channel
   if (!Array.isArray(rawChannels)) return null
 
   const attemptChannelIds = rawChannels
@@ -51,11 +125,26 @@ export function getFailoverTrace(log: UsageLog): FailoverTrace | null {
 
   return {
     attemptChannelIds,
+    attempts: attemptChannelIds.map((channelId, index) => ({
+      index,
+      channelId,
+      outcome: null,
+      statusCode: null,
+      errorCode: null,
+      durationMs: null,
+      retried: index < attemptChannelIds.length - 1,
+    })),
     retryCount: attemptChannelIds.length - 1,
     finalSuccessfulChannelId:
       log.type === 2 && log.channel > 0 ? log.channel : null,
     requestId: log.request_id || null,
+    result: log.type === 2 ? 'success' : null,
   }
+}
+
+function finiteNumber(value: unknown): number | null {
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? number : null
 }
 
 export function getRelatedLogSearch(log: UsageLog): RelatedLogSearch | null {

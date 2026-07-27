@@ -273,6 +273,15 @@ distributor.no_available_channel: "No available channel for model {{.Model}} und
 distributor.invalid_midjourney_request: "Invalid Midjourney request: {{.Error}}"
 distributor.invalid_request_parse_model: "Invalid request, unable to parse model"
 
+# Personal reliability messages
+personal_reliability.invalid_payload: "Invalid reliability request payload"
+personal_reliability.channel_required: "Select at least one valid channel"
+personal_reliability.batch_limit: "No more than {{.Limit}} channels can be processed at once"
+personal_reliability.channel_not_found: "One or more selected channels do not exist"
+personal_reliability.task_active: "A channel test task is already pending or running"
+personal_reliability.group_model_required: "A valid explicit group and model are required"
+personal_reliability.explicit_group: "Route preview requires an explicit group instead of auto"
+
 # Custom OAuth provider messages
 custom_oauth.not_found: "Custom OAuth provider not found"
 custom_oauth.slug_empty: "Slug cannot be empty"

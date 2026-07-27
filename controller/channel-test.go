@@ -904,7 +904,7 @@ type channelTestSummary struct {
 // cancellation so a system-task runner that loses its lease stops promptly. When
 // report is non-nil it is called after each channel with (processed, total) so
 // the system task can surface progress.
-func performChannelTests(ctx context.Context, channels []*model.Channel, testUserID int, allowDisable bool, report func(processed, total int)) channelTestSummary {
+func performChannelTests(ctx context.Context, channels []*model.Channel, testUserID int, allowDisable bool, resetCircuitsOnSuccess bool, report func(processed, total int)) channelTestSummary {
 	summary := channelTestSummary{}
 	var disableThreshold = int64(common.ChannelDisableThreshold * 1000)
 	if disableThreshold == 0 {
@@ -951,6 +951,10 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 
 		if newAPIError == nil {
 			summary.Succeeded++
+			if resetCircuitsOnSuccess && result.context != nil {
+				testedModel := common.GetContextKeyString(result.context, constant.ContextKeyOriginalModel)
+				service.ResetPersonalCircuit(channel.Id, testedModel)
+			}
 		} else {
 			summary.Failed++
 		}
@@ -994,7 +998,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 // trigger passes ChannelTestModeScheduledAll to test every channel. When notify
 // is set the root user is notified on completion. Cross-instance execution is
 // guarded by the system task per-type lock, so no process-local guard is needed.
-func runChannelTestTask(ctx context.Context, mode string, notify bool, report func(processed, total int)) (channelTestSummary, error) {
+func runChannelTestTask(ctx context.Context, payload channelTestTaskPayload, report func(processed, total int)) (channelTestSummary, error) {
 	testUserID, err := resolveChannelTestUserID(nil)
 	if err != nil {
 		return channelTestSummary{}, err
@@ -1003,13 +1007,24 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 	if err != nil {
 		return channelTestSummary{}, err
 	}
+	mode := payload.Mode
 	if strings.TrimSpace(mode) == "" {
 		mode = operation_setting.GetMonitorSetting().ChannelTestMode
 	}
 	selected := selectChannelsForAutomaticTest(channels, mode)
+	if len(payload.ChannelIDs) > 0 {
+		requested := make(map[int]struct{}, len(payload.ChannelIDs))
+		for _, channelID := range payload.ChannelIDs {
+			requested[channelID] = struct{}{}
+		}
+		selected = lo.Filter(selected, func(channel *model.Channel, _ int) bool {
+			_, ok := requested[channel.Id]
+			return ok
+		})
+	}
 	allowDisable := mode != operation_setting.ChannelTestModePassiveRecovery
-	summary := performChannelTests(ctx, selected, testUserID, allowDisable, report)
-	if notify && (ctx == nil || ctx.Err() == nil) {
+	summary := performChannelTests(ctx, selected, testUserID, allowDisable, payload.ResetCircuitsOnSuccess, report)
+	if payload.Notify && (ctx == nil || ctx.Err() == nil) {
 		service.NotifyRootUser(dto.NotifyTypeChannelTest, "通道测试完成", "所有通道测试已完成")
 	}
 	return summary, nil

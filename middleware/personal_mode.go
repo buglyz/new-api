@@ -253,6 +253,19 @@ func PersonalModeAdmin() gin.HandlerFunc {
 	}
 }
 
+// PersonalModeOnly limits fork-specific operational APIs to personal mode.
+// Standard mode keeps its original surface and receives the same stable 403
+// contract used by the personal-mode capability matrix.
+func PersonalModeOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if operation_setting.SelfUseModeEnabled {
+			c.Next()
+			return
+		}
+		abortPersonalModeDisabled(c)
+	}
+}
+
 // PersonalModeOption runs after RootAuth so unauthenticated requests cannot
 // make the gateway parse option payloads before authorization.
 func PersonalModeOption() gin.HandlerFunc {

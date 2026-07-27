@@ -1,0 +1,23 @@
+services:
+  new-api:
+    image: ${NEW_API_IMAGE:?set NEW_API_IMAGE in .image.env}
+    container_name: ${NEW_API_CONTAINER_NAME:-new-api}
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "127.0.0.1:${NEW_API_PORT:-18080}:3000"
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O - http://127.0.0.1:3000/api/status | grep -q '"success":true'
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s

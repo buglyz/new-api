@@ -325,6 +325,17 @@ const (
 	MsgDistributorInvalidParseModel       = "distributor.invalid_request_parse_model"
 )
 
+// Personal reliability operations
+const (
+	MsgPersonalReliabilityInvalidPayload     = "personal_reliability.invalid_payload"
+	MsgPersonalReliabilityChannelRequired    = "personal_reliability.channel_required"
+	MsgPersonalReliabilityBatchLimit         = "personal_reliability.batch_limit"
+	MsgPersonalReliabilityChannelNotFound    = "personal_reliability.channel_not_found"
+	MsgPersonalReliabilityTaskActive         = "personal_reliability.task_active"
+	MsgPersonalReliabilityGroupModelRequired = "personal_reliability.group_model_required"
+	MsgPersonalReliabilityExplicitGroup      = "personal_reliability.explicit_group"
+)
+
 // Custom OAuth provider related messages
 const (
 	MsgCustomOAuthNotFound          = "custom_oauth.not_found"

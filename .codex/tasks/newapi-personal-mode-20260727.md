@@ -1,7 +1,7 @@
 # NewAPI Personal Failover Mode
 
 Date: 2026-07-27
-Status: Operations visibility verified
+Status: Reliability control loop locally verified; pending push and Docker verification
 
 ## Objective
 
@@ -61,3 +61,46 @@ subscription, redemption, and public marketing surfaces while the mode is on.
 - `copyright:check` still reports the untouched upstream file
   `web/src/features/channels/lib/channel-field-update.ts`. All new frontend
   source files retain the project's protected copyright header.
+
+## Reliability Control Loop Follow-up
+
+- [x] Record structured per-attempt relay traces without request bodies, keys,
+  or raw upstream error messages.
+- [x] Add personal-mode channel-and-model temporary circuits with bounded
+  backoff, half-open recovery, and an all-candidates-cooling fallback.
+- [x] Notify only on deduplicated circuit state transitions.
+- [x] Add bounded batch probing/recovery and a read-only route preview.
+- [x] Surface circuit state, attempt outcomes, and maintenance tools in the
+  personal operations UI with complete i18n coverage.
+- [x] Add reversible SQLite backup/upgrade/rollback tooling and documentation.
+- [x] Keep documentation-only changes out of Docker builds, refresh QEMU, and
+  add a conflict-visible upstream synchronization workflow.
+- [x] Re-run frontend checks/build before the complete Go test suite and review
+  standard-mode behavior.
+- [ ] Push and verify the Docker workflow.
+
+### Reliability Policy
+
+- Temporary circuits are enabled only while `SelfUseModeEnabled` is true.
+- Transport failures, HTTP 429, and HTTP 5xx use exponential backoff from 30
+  seconds to 15 minutes; `model_not_found` opens only the affected
+  channel/model pair for 30 minutes.
+- HTTP 401/403 remain governed by the existing hard auto-disable path.
+- Circuit state is intentionally process-local and is reported as volatile;
+  restarting the process clears temporary cooldowns.
+- Attempt logs contain identifiers, timing, outcome enums, status/error codes,
+  retry decisions, and request correlation only. They never contain prompts,
+  responses, channel keys, or raw upstream error text.
+
+### Local Verification
+
+- Focused frontend tests: 26 passed across personal mode, full pagination,
+  channel attention, API key risks, failover traces, and reliability batches.
+- `bun run typecheck`, changed-file OXLint, protected-header format check, i18n
+  synchronization, and the production frontend build passed.
+- `GOMAXPROCS=1 go test -p 1 ./...` passed after the final frontend build.
+- `git diff --check`, YAML parsing, ShellCheck, Compose expansion, and an
+  isolated SQLite backup smoke test passed.
+- `copyright:check` still identifies the untouched upstream
+  `web/src/features/channels/lib/channel-field-update.ts`; new frontend files
+  retain protected headers.

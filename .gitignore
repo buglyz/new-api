@@ -35,6 +35,12 @@ token_estimator_test.go
 skills-lock.json
 .playwright-mcp
 
+# Personal deployment runtime state and verified backups.
+/deploy/personal/.image.env
+/deploy/personal/backups/
+/deploy/personal/data/
+/deploy/personal/logs/
+
 # Local-only live probes and scratch test workspaces.
 .local-tests/
 service/relayconvert/chat_responses_live_local_test.go

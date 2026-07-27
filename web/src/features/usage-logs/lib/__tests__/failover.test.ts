@@ -57,9 +57,84 @@ describe('failover trace', () => {
   test('exposes attempts, retry count, final success, and request ID', () => {
     assert.deepEqual(getFailoverTrace(log()), {
       attemptChannelIds: [1, 2, 3],
+      attempts: [
+        {
+          index: 0,
+          channelId: 1,
+          outcome: null,
+          statusCode: null,
+          errorCode: null,
+          durationMs: null,
+          retried: true,
+        },
+        {
+          index: 1,
+          channelId: 2,
+          outcome: null,
+          statusCode: null,
+          errorCode: null,
+          durationMs: null,
+          retried: true,
+        },
+        {
+          index: 2,
+          channelId: 3,
+          outcome: null,
+          statusCode: null,
+          errorCode: null,
+          durationMs: null,
+          retried: false,
+        },
+      ],
       retryCount: 2,
       finalSuccessfulChannelId: 3,
       requestId: 'req-123',
+      result: 'success',
+    })
+  })
+
+  test('prefers structured attempt outcomes without exposing raw errors', () => {
+    const trace = getFailoverTrace(
+      log({
+        other: JSON.stringify({
+          admin_info: {
+            relay_attempts: {
+              version: 1,
+              request_id: 'req-structured',
+              result: 'success',
+              retry_count: 1,
+              final_channel_id: 9,
+              attempts: [
+                {
+                  channel_id: 7,
+                  outcome: 'upstream_5xx',
+                  status_code: 503,
+                  duration_ms: 120,
+                  retried: true,
+                },
+                {
+                  channel_id: 9,
+                  outcome: 'success',
+                  duration_ms: 80,
+                  retried: false,
+                },
+              ],
+            },
+          },
+        }),
+      })
+    )
+
+    assert.equal(trace?.requestId, 'req-structured')
+    assert.equal(trace?.finalSuccessfulChannelId, 9)
+    assert.deepEqual(trace?.attempts[0], {
+      index: 0,
+      channelId: 7,
+      outcome: 'upstream_5xx',
+      statusCode: 503,
+      errorCode: null,
+      durationMs: 120,
+      retried: true,
     })
   })
 

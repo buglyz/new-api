@@ -10,10 +10,11 @@ import (
 )
 
 type permissionRoute struct {
-	method     string
-	path       string
-	permission authz.Permission
-	handler    gin.HandlerFunc
+	method       string
+	path         string
+	permission   authz.Permission
+	handler      gin.HandlerFunc
+	personalOnly bool
 }
 
 func registerChannelRoutes(apiRouter *gin.RouterGroup) {
@@ -29,10 +30,12 @@ func registerChannelRoutes(apiRouter *gin.RouterGroup) {
 	)
 
 	for _, route := range channelPermissionRoutes {
-		channelRoute.Handle(route.method, route.path,
-			middleware.RequirePermission(route.permission),
-			route.handler,
-		)
+		handlers := []gin.HandlerFunc{middleware.RequirePermission(route.permission)}
+		if route.personalOnly {
+			handlers = append(handlers, middleware.PersonalModeOnly())
+		}
+		handlers = append(handlers, route.handler)
+		channelRoute.Handle(route.method, route.path, handlers...)
 	}
 }
 
@@ -42,6 +45,11 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/models", permission: authz.ChannelRead, handler: controller.ChannelListModels},
 	{method: http.MethodGet, path: "/models_enabled", permission: authz.ChannelRead, handler: controller.EnabledListModels},
 	{method: http.MethodGet, path: "/ops", permission: authz.ChannelRead, handler: controller.GetChannelOps},
+	{method: http.MethodGet, path: "/reliability", permission: authz.ChannelRead, handler: controller.GetPersonalReliability, personalOnly: true},
+	{method: http.MethodPost, path: "/reliability/probe", permission: authz.ChannelOperate, handler: controller.ProbePersonalReliabilityChannels, personalOnly: true},
+	{method: http.MethodPost, path: "/reliability/recover", permission: authz.ChannelOperate, handler: controller.RecoverPersonalReliabilityChannels, personalOnly: true},
+	{method: http.MethodPost, path: "/reliability/reset", permission: authz.ChannelOperate, handler: controller.ResetPersonalReliabilityCircuits, personalOnly: true},
+	{method: http.MethodPost, path: "/reliability/simulate", permission: authz.ChannelRead, handler: controller.SimulatePersonalRoute, personalOnly: true},
 	{method: http.MethodGet, path: "/:id", permission: authz.ChannelRead, handler: controller.GetChannel},
 	{method: http.MethodGet, path: "/test", permission: authz.ChannelOperate, handler: controller.TestAllChannels},
 	{method: http.MethodGet, path: "/test/:id", permission: authz.ChannelOperate, handler: controller.TestChannel},

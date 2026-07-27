@@ -106,6 +106,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
+	AppendSuccessfulRelayTrace(ctx, adminInfo, relayInfo.ChannelId)
 
 	other["admin_info"] = adminInfo
 	appendRequestPath(ctx, relayInfo, other)

@@ -1,0 +1,97 @@
+name: Prepare upstream sync
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    if: github.repository == 'buglyz/new-api'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BRANCH: automation/upstream-sync
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out fork main
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/Calcium-Ion/new-api.git
+          git fetch --no-tags upstream main
+
+      - name: Merge upstream into sync branch
+        id: merge
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            printf 'changed=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          remote_head="$(git ls-remote --heads origin "$BRANCH" | awk '{print $1}')"
+          git switch -C "$BRANCH" origin/main
+          if ! git merge --no-edit upstream/main; then
+            git merge --abort
+            printf '### Upstream sync needs manual conflict resolution\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          git push --force-with-lease="refs/heads/${BRANCH}:${remote_head}" origin "HEAD:${BRANCH}"
+          printf 'changed=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Create or update sync pull request
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          body_file="$(mktemp)"
+          cat >"$body_file" <<'EOF'
+          # ⚠️ 提交说明 / PR Notice
+          > [!IMPORTANT]
+          >
+          > - This synchronization PR was prepared by repository automation and is AI-assisted. Review conflicts and personal-mode behavior before merging.
+
+          ## 📝 变更描述 / Description
+          Merge the latest `Calcium-Ion/new-api:main` into the personal fork through a reviewable branch. The workflow never merges directly into `main`.
+
+          ## 🚀 变更类型 / Type of change
+          - [ ] 🐛 Bug 修复 (Bug fix)
+          - [ ] ✨ 新功能 (New feature)
+          - [x] ⚡ 性能优化 / 重构 (Refactor)
+          - [ ] 📝 文档更新 (Documentation)
+
+          ## 🔗 关联任务 / Related Issue
+          - None
+
+          ## ✅ 提交前检查项 / Checklist
+          - [ ] **人工确认:** Maintainer reviewed the upstream diff and resolved any semantic conflicts.
+          - [x] **非重复提交:** The workflow reuses one stable sync branch and pull request.
+          - [x] **Bug fix 说明:** This PR is not classified as a bug fix.
+          - [ ] **变更理解:** Maintainer confirmed personal-mode and standard-mode behavior.
+          - [x] **范围聚焦:** The branch contains the upstream merge only.
+          - [ ] **本地验证:** Run frontend build before the complete Go test suite.
+          - [x] **安全合规:** No repository secrets are added to the branch.
+
+          ## 📸 运行证明 / Proof of Work
+          See the upstream sync workflow run attached to this pull request.
+          EOF
+
+          existing="$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh pr edit "$existing" --title "chore: sync upstream main" --body-file "$body_file"
+          else
+            gh pr create --base main --head "$BRANCH" --title "chore: sync upstream main" --body-file "$body_file"
+          fi
