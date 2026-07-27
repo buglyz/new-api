@@ -20,6 +20,10 @@ import { useMemo } from 'react'
 
 import type { NavGroup, NavItem } from '@/components/layout/types'
 import { useStatus } from '@/hooks/use-status'
+import {
+  isPersonalModeEnabled,
+  isPersonalModeNavPathDisabled,
+} from '@/lib/personal-mode'
 import { useAuthStore } from '@/stores/auth-store'
 
 type SidebarSectionConfig = {
@@ -318,6 +322,10 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
 export function useIsSidebarModuleVisible(url: string): boolean {
   const { status } = useStatus()
   const { auth } = useAuthStore()
+
+  if (isPersonalModeEnabled(status) && isPersonalModeNavPathDisabled(url)) {
+    return false
+  }
 
   const adminConfig = parseSidebarConfig(
     status?.SidebarModulesAdmin as string | null | undefined

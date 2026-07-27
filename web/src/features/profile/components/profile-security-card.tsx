@@ -37,6 +37,7 @@ import { DeleteAccountDialog } from './dialogs/delete-account-dialog'
 interface ProfileSecurityCardProps {
   profile: UserProfile | null
   loading: boolean
+  personalMode: boolean
 }
 
 type DialogKey = 'password' | 'token' | 'delete'
@@ -44,6 +45,7 @@ type DialogKey = 'password' | 'token' | 'delete'
 export function ProfileSecurityCard({
   profile,
   loading,
+  personalMode,
 }: ProfileSecurityCardProps) {
   const { t } = useTranslation()
   const dialogs = useDialogs<DialogKey>()
@@ -81,13 +83,17 @@ export function ProfileSecurityCard({
       action: () => dialogs.open('token'),
       variant: 'default' as const,
     },
-    {
-      icon: Trash2,
-      title: t('Delete Account'),
-      description: t('Permanently delete your account and all data'),
-      action: () => dialogs.open('delete'),
-      variant: 'destructive' as const,
-    },
+    ...(!personalMode
+      ? [
+          {
+            icon: Trash2,
+            title: t('Delete Account'),
+            description: t('Permanently delete your account and all data'),
+            action: () => dialogs.open('delete'),
+            variant: 'destructive' as const,
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -139,13 +145,15 @@ export function ProfileSecurityCard({
         }
       />
 
-      <DeleteAccountDialog
-        open={dialogs.isOpen('delete')}
-        onOpenChange={(open) =>
-          open ? dialogs.open('delete') : dialogs.close('delete')
-        }
-        username={profile.username}
-      />
+      {!personalMode && (
+        <DeleteAccountDialog
+          open={dialogs.isOpen('delete')}
+          onOpenChange={(open) =>
+            open ? dialogs.open('delete') : dialogs.close('delete')
+          }
+          username={profile.username}
+        />
+      )}
     </>
   )
 }

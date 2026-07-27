@@ -42,6 +42,11 @@ import {
 } from '@/lib/auth-session'
 import { subscribeAuthSessionEvents } from '@/lib/auth-session-sync'
 import { resolveLegacyRoute } from '@/lib/legacy-route'
+import {
+  getPersonalModeRedirect,
+  isPersonalModeEnabled,
+} from '@/lib/personal-mode'
+import { fetchPersonalModeStatus } from '@/lib/personal-mode-route'
 import { useAuthStore } from '@/stores/auth-store'
 
 function RootComponent() {
@@ -143,7 +148,7 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
   // 应用初始化与路由解析前统一校验会话
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ context, location }) => {
     const legacyTarget = resolveLegacyRoute(location.href)
     if (legacyTarget) {
       throw redirect({ href: legacyTarget, replace: true })
@@ -153,6 +158,7 @@ export const Route = createRootRouteWithContext<{
     const needsSetupCheck =
       !setupStatusChecked && !pathname.startsWith('/setup')
     const authBootstrap = bootstrapAuthentication()
+    const statusPromise = fetchPersonalModeStatus(context.queryClient)
 
     // 只检查 setup 状态（如果需要）
     if (needsSetupCheck) {
@@ -165,6 +171,7 @@ export const Route = createRootRouteWithContext<{
           return null
         }),
         authBootstrap,
+        statusPromise,
       ])
 
       if (status?.success && status.data && !status.data.status) {
@@ -173,7 +180,18 @@ export const Route = createRootRouteWithContext<{
       setupStatusChecked = true
       setSetupStatusCache(true)
     } else {
-      await authBootstrap
+      await Promise.all([authBootstrap, statusPromise])
+    }
+
+    const status = await statusPromise
+    const { auth } = useAuthStore.getState()
+    const redirectTarget = getPersonalModeRedirect(
+      pathname,
+      !!auth.user && !!auth.accessToken,
+      isPersonalModeEnabled(status)
+    )
+    if (redirectTarget) {
+      throw redirect({ href: redirectTarget, replace: true })
     }
   },
   component: RootComponent,

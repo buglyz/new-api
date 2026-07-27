@@ -28,6 +28,8 @@ const (
 	MsgBatchTooMany      = "common.batch_too_many"
 )
 
+const MsgPersonalModeDisabled = "common.personal_mode_disabled"
+
 // Auth middleware messages
 const (
 	MsgAuthNotLoggedIn           = "auth.not_logged_in"

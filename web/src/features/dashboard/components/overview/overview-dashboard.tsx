@@ -50,8 +50,13 @@ import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { fetchTokenKey, getApiKeys } from '@/features/keys/api'
 import type { ApiKey } from '@/features/keys/types'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { useStatus } from '@/hooks/use-status'
 import { getUserModels } from '@/lib/api'
 import { MOTION_TRANSITION } from '@/lib/motion'
+import {
+  isPersonalModeEnabled,
+  prioritizePersonalModeActions,
+} from '@/lib/personal-mode'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -458,6 +463,8 @@ function CompactQuickAction(props: { action: QuickAction }) {
 export function OverviewDashboard() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
+  const { status } = useStatus()
+  const personalMode = isPersonalModeEnabled(status)
   const { items: apiInfoItems } = useApiInfo()
   const {
     apiInfo: showApiInfoPanel,
@@ -506,13 +513,17 @@ export function OverviewDashboard() {
         icon: KeyRound,
         completed: Boolean(preferredKey),
       },
-      {
-        title: t('Add credits'),
-        description: t('Keep enough balance before production traffic'),
-        to: '/wallet',
-        icon: CreditCard,
-        completed: remainQuota > 0 || usedQuota > 0,
-      },
+      ...(!personalMode
+        ? [
+            {
+              title: t('Add credits'),
+              description: t('Keep enough balance before production traffic'),
+              to: '/wallet' as const,
+              icon: CreditCard,
+              completed: remainQuota > 0 || usedQuota > 0,
+            },
+          ]
+        : []),
       {
         title: t('Send a request'),
         description: t('Verify routing with Playground or your client'),
@@ -521,7 +532,7 @@ export function OverviewDashboard() {
         completed: requestCount > 0,
       },
     ],
-    [preferredKey, remainQuota, requestCount, t, usedQuota]
+    [personalMode, preferredKey, remainQuota, requestCount, t, usedQuota]
   )
 
   const quickActions = useMemo<QuickAction[]>(
@@ -555,10 +566,14 @@ export function OverviewDashboard() {
     [t]
   )
 
-  const visibleQuickActions = useMemo(
-    () => quickActions.filter((action) => !action.adminOnly || isAdmin),
-    [isAdmin, quickActions]
-  )
+  const visibleQuickActions = useMemo(() => {
+    const visible = quickActions.filter(
+      (action) =>
+        (!personalMode || action.to !== '/pricing') &&
+        (!action.adminOnly || isAdmin)
+    )
+    return prioritizePersonalModeActions(visible, personalMode)
+  }, [isAdmin, personalMode, quickActions])
 
   const heroSignals = useMemo<HeroSignal[]>(
     () => [

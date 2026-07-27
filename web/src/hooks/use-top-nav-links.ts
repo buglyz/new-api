@@ -21,6 +21,10 @@ import { useTranslation } from 'react-i18next'
 
 import { useStatus } from '@/hooks/use-status'
 import { parseHeaderNavModulesFromStatus } from '@/lib/nav-modules'
+import {
+  isPersonalModeEnabled,
+  selectPersonalModeTopNavLinks,
+} from '@/lib/personal-mode'
 import { useAuthStore } from '@/stores/auth-store'
 
 export type TopNavLink = {
@@ -100,5 +104,9 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('About'), href: '/about' })
   }
 
-  return links
+  return selectPersonalModeTopNavLinks(
+    links,
+    { title: t('Console'), href: '/dashboard' },
+    isPersonalModeEnabled(status as Record<string, unknown> | null)
+  )
 }

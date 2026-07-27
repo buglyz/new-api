@@ -123,21 +123,44 @@ func GetStatus(c *gin.Context) {
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
 	}
+	personalMode := operation_setting.SelfUseModeEnabled
+	if personalMode {
+		for _, key := range []string{
+			"email_verification",
+			"github_oauth",
+			"discord_oauth",
+			"linuxdo_oauth",
+			"telegram_oauth",
+			"wechat_login",
+			"oidc_enabled",
+			"register_enabled",
+			"password_register_enabled",
+			"oauth_register_enabled",
+			"api_info_enabled",
+			"announcements_enabled",
+			"faq_enabled",
+			"user_agreement_enabled",
+			"privacy_policy_enabled",
+			"checkin_enabled",
+		} {
+			data[key] = false
+		}
+	}
 
 	// 根据启用状态注入可选内容
-	if cs.ApiInfoEnabled {
+	if !personalMode && cs.ApiInfoEnabled {
 		data["api_info"] = console_setting.GetApiInfo()
 	}
-	if cs.AnnouncementsEnabled {
+	if !personalMode && cs.AnnouncementsEnabled {
 		data["announcements"] = console_setting.GetAnnouncements()
 	}
-	if cs.FAQEnabled {
+	if !personalMode && cs.FAQEnabled {
 		data["faq"] = console_setting.GetFAQ()
 	}
 
 	// Add enabled custom OAuth providers
 	customProviders := oauth.GetEnabledCustomProviders()
-	if len(customProviders) > 0 {
+	if !personalMode && len(customProviders) > 0 {
 		type CustomOAuthInfo struct {
 			Id                    int    `json:"id"`
 			Name                  string `json:"name"`

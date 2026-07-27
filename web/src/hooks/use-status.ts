@@ -37,35 +37,33 @@ function getInitialStatus(): SystemStatus | undefined {
   return undefined
 }
 
+export async function fetchStatus(): Promise<SystemStatus | null> {
+  const status = await getStatus()
+  try {
+    if (status) {
+      const { setConfig } = useSystemConfigStore.getState()
+      setConfig(mapStatusDataToConfig(status))
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn('[useStatus] Failed to sync status to system config', err)
+    }
+  }
+  try {
+    if (typeof window !== 'undefined' && status) {
+      window.localStorage.setItem('status', JSON.stringify(status))
+    }
+  } catch {
+    /* empty */
+  }
+  return status as SystemStatus | null
+}
+
 export function useStatus() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['status'],
-    queryFn: async () => {
-      const status = await getStatus()
-      try {
-        if (status) {
-          const { setConfig } = useSystemConfigStore.getState()
-          setConfig(mapStatusDataToConfig(status))
-        }
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[useStatus] Failed to sync status to system config',
-            err
-          )
-        }
-      }
-      // Save to localStorage
-      try {
-        if (typeof window !== 'undefined' && status) {
-          window.localStorage.setItem('status', JSON.stringify(status))
-        }
-      } catch {
-        /* empty */
-      }
-      return status as SystemStatus | null
-    },
+    queryFn: fetchStatus,
     // Use localStorage data as initial data
     placeholderData: getInitialStatus(),
     // Data becomes stale after 5 minutes
