@@ -19,9 +19,46 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, test } from 'bun:test'
 import assert from 'node:assert/strict'
 
+import { Window } from 'happy-dom'
+
 import { usageLogSchema } from '../../data/schema'
 import type { LogOtherData } from '../../types'
-import { buildTypeDetailSegments } from '../columns/common-logs-columns'
+
+// Sibling suites install a partial DOM (`window` and `HTMLElement` without
+// `matchMedia` or `customElements`) and may leave it in place. Browser-oriented
+// transitive dependencies of the column module feature-detect one global and
+// then use a sibling, so a partial DOM crashes them at import time. Install a
+// complete window here to keep this file independent of suite ordering.
+const domWindow = new Window({ url: 'http://localhost/' })
+for (const key of [
+  'window',
+  'document',
+  'navigator',
+  'customElements',
+  'matchMedia',
+  'HTMLElement',
+  'SVGElement',
+  'Node',
+  'Element',
+  'Event',
+  'CustomEvent',
+  'MutationObserver',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+  'getComputedStyle',
+] as const) {
+  const value: unknown = domWindow[key]
+  Object.defineProperty(globalThis, key, {
+    configurable: true,
+    value:
+      typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(domWindow)
+        : value,
+  })
+}
+
+const { buildTypeDetailSegments } =
+  await import('../columns/common-logs-columns')
 
 const t = (key: string) => key
 const violationLog = usageLogSchema.parse({

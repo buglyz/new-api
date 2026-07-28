@@ -331,13 +331,45 @@ func RecordPersonalCircuitSuccess(channelID int, modelName string) {
 }
 
 func ResetPersonalCircuits(channelIDs []int) int {
+	if !operation_setting.SelfUseModeEnabled {
+		return 0
+	}
 	ids := make(map[int]struct{}, len(channelIDs))
 	for _, channelID := range channelIDs {
 		if channelID > 0 {
 			ids[channelID] = struct{}{}
 		}
 	}
-	return len(personalCircuits.reset(ids, ""))
+	if len(ids) == 0 {
+		return 0
+	}
+	transitions := personalCircuits.reset(ids, "")
+	for _, transition := range transitions {
+		notifyPersonalCircuitTransition(transition)
+	}
+	return len(transitions)
+}
+
+// ForgetPersonalCircuits drops cooldown state for channels whose configuration
+// changed or that no longer exist. Reconfiguring an upstream invalidates what
+// earlier failures proved, so the new configuration gets a clean attempt instead
+// of waiting out a backoff window that no longer describes reality. Unlike an
+// operator-requested reset this stays silent: the state change follows from the
+// edit the operator just made, so a recovery notification carries no news.
+func ForgetPersonalCircuits(channelIDs ...int) {
+	if !operation_setting.SelfUseModeEnabled {
+		return
+	}
+	ids := make(map[int]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if channelID > 0 {
+			ids[channelID] = struct{}{}
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	personalCircuits.reset(ids, "")
 }
 
 func ResetPersonalCircuit(channelID int, modelName string) bool {

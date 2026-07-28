@@ -727,6 +727,7 @@ func DeleteChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ForgetPersonalCircuits(id)
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
@@ -909,6 +910,7 @@ func DeleteChannelBatch(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ForgetPersonalCircuits(channelBatch.Ids...)
 	if deletedCount > 0 {
 		service.ResetProxyClientCache()
 	}
@@ -1085,6 +1087,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ForgetPersonalCircuits(channel.Id)
 	if proxyChanged {
 		service.InvalidateProxyClient(originProxy)
 	}
@@ -1134,6 +1137,7 @@ func UpdateChannelStatus(c *gin.Context) {
 	changed := model.UpdateChannelStatus(id, "", req.Status, "manual operation")
 	if changed {
 		model.InitChannelCache()
+		service.ForgetPersonalCircuits(id)
 	}
 	recordManageAudit(c, "channel.status_update", map[string]interface{}{
 		"id":      id,
@@ -1154,13 +1158,16 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 		return
 	}
 	changedCount := 0
+	changedIds := make([]int, 0, len(req.Ids))
 	for _, id := range req.Ids {
 		if model.UpdateChannelStatus(id, "", req.Status, "manual batch operation") {
 			changedCount++
+			changedIds = append(changedIds, id)
 		}
 	}
 	if changedCount > 0 {
 		model.InitChannelCache()
+		service.ForgetPersonalCircuits(changedIds...)
 	}
 	recordManageAudit(c, "channel.status_update_batch", map[string]interface{}{
 		"count":  changedCount,

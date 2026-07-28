@@ -211,5 +211,4 @@ func getRandomSatisfiedChannel(param *RetryParam, group string, retry int) (*mod
 		}
 		blocked[channel.Id] = struct{}{}
 	}
-	return nil, nil
 }

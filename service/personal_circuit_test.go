@@ -101,3 +101,87 @@ func TestPersonalCircuitGateIsDisabledInStandardMode(t *testing.T) {
 	assert.True(t, PersonalCircuitCanAttempt(1, "model"))
 	assert.True(t, ClaimPersonalCircuit(1, "model", false))
 }
+
+func TestResetPersonalCircuitsClearsEveryModelForAChannel(t *testing.T) {
+	previousMode := operation_setting.SelfUseModeEnabled
+	previousCircuits := personalCircuits
+	operation_setting.SelfUseModeEnabled = true
+	personalCircuits = newPersonalCircuitManager(time.Now)
+	t.Cleanup(func() {
+		operation_setting.SelfUseModeEnabled = previousMode
+		personalCircuits = previousCircuits
+	})
+
+	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
+	personalCircuits.recordFailure(1, "broken", "model-a", attempt)
+	personalCircuits.recordFailure(1, "broken", "model-b", attempt)
+	personalCircuits.recordFailure(2, "healthy", "model-a", attempt)
+	require.False(t, PersonalCircuitCanAttempt(1, "model-a"))
+
+	assert.Equal(t, 2, ResetPersonalCircuits([]int{1}))
+	assert.True(t, PersonalCircuitCanAttempt(1, "model-a"))
+	assert.True(t, PersonalCircuitCanAttempt(1, "model-b"))
+	assert.False(t, PersonalCircuitCanAttempt(2, "model-a"))
+}
+
+func TestResetPersonalCircuitsIsInertInStandardMode(t *testing.T) {
+	previousMode := operation_setting.SelfUseModeEnabled
+	previousCircuits := personalCircuits
+	operation_setting.SelfUseModeEnabled = true
+	personalCircuits = newPersonalCircuitManager(time.Now)
+	personalCircuits.recordFailure(1, "broken", "model-a", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	t.Cleanup(func() {
+		operation_setting.SelfUseModeEnabled = previousMode
+		personalCircuits = previousCircuits
+	})
+
+	operation_setting.SelfUseModeEnabled = false
+	assert.Equal(t, 0, ResetPersonalCircuits([]int{1}))
+}
+
+func TestForgetPersonalCircuitsClearsStateWithoutNotifying(t *testing.T) {
+	previousMode := operation_setting.SelfUseModeEnabled
+	previousCircuits := personalCircuits
+	operation_setting.SelfUseModeEnabled = true
+	personalCircuits = newPersonalCircuitManager(time.Now)
+	t.Cleanup(func() {
+		operation_setting.SelfUseModeEnabled = previousMode
+		personalCircuits = previousCircuits
+	})
+
+	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
+	personalCircuits.recordFailure(1, "edited", "model-a", attempt)
+	personalCircuits.recordFailure(1, "edited", "model-b", attempt)
+	personalCircuits.recordFailure(2, "untouched", "model-a", attempt)
+	require.False(t, PersonalCircuitCanAttempt(1, "model-a"))
+
+	ForgetPersonalCircuits(1)
+
+	// The reconfigured channel is immediately eligible again on every model,
+	// while unrelated channels keep serving out their cooldown.
+	assert.True(t, PersonalCircuitCanAttempt(1, "model-a"))
+	assert.True(t, PersonalCircuitCanAttempt(1, "model-b"))
+	assert.False(t, PersonalCircuitCanAttempt(2, "model-a"))
+
+	circuits, _ := personalCircuits.snapshot()
+	require.Len(t, circuits, 1)
+	assert.Equal(t, 2, circuits[0].ChannelID)
+}
+
+func TestForgetPersonalCircuitsIsInertInStandardMode(t *testing.T) {
+	previousMode := operation_setting.SelfUseModeEnabled
+	previousCircuits := personalCircuits
+	operation_setting.SelfUseModeEnabled = true
+	personalCircuits = newPersonalCircuitManager(time.Now)
+	t.Cleanup(func() {
+		operation_setting.SelfUseModeEnabled = previousMode
+		personalCircuits = previousCircuits
+	})
+	personalCircuits.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+
+	operation_setting.SelfUseModeEnabled = false
+	ForgetPersonalCircuits(1)
+
+	operation_setting.SelfUseModeEnabled = true
+	assert.False(t, PersonalCircuitCanAttempt(1, "model"))
+}
