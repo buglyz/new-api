@@ -3,11 +3,13 @@ package controller
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
@@ -84,4 +86,13 @@ func TestShouldRetryOnlyExplicitModelNotFoundOn404(t *testing.T) {
 
 	assert.True(t, shouldRetry(ctx, modelMissing, 1, retry))
 	assert.False(t, shouldRetry(ctx, genericNotFound, 1, retry))
+}
+
+func TestShouldRetryTaskRelayDoesNotRetryAmbiguousRequestTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	retry := &service.RetryParam{StartedAt: time.Now()}
+	taskErr := &dto.TaskError{StatusCode: http.StatusRequestTimeout}
+
+	assert.False(t, shouldRetryTaskRelay(ctx, taskErr, 1, retry))
 }

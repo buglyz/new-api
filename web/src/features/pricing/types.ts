@@ -89,14 +89,19 @@ export type ModelCapability =
   | 'embeddings'
 
 export type PricingData = {
-  success: boolean
-  message?: string
-  data: PricingModel[]
+  models: PricingModel[]
   vendors: PricingVendor[]
   group_ratio: Record<string, number>
   usable_group: Record<string, { desc: string; ratio: number }>
   supported_endpoint: Record<string, string>
   auto_groups: string[]
+  pricing_version: string
+}
+
+export type PricingResponse = {
+  success: boolean
+  message: string
+  data?: PricingData
 }
 
 export type TokenUnit = 'M' | 'K'

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type { PricingData } from './types'
+import type { PricingData, PricingResponse } from './types'
 
 // ----------------------------------------------------------------------------
 // Pricing APIs
@@ -26,6 +26,9 @@ import type { PricingData } from './types'
 
 // Get model pricing data
 export async function getPricing(): Promise<PricingData> {
-  const res = await api.get('/api/pricing')
-  return res.data
+  const res = await api.get<PricingResponse>('/api/pricing')
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to load model pricing')
+  }
+  return res.data.data
 }

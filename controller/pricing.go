@@ -54,9 +54,8 @@ func GetPricing(c *gin.Context) {
 		groupRatio[group] = ratio
 	}
 
-	c.JSON(200, gin.H{
-		"success":            true,
-		"data":               pricing,
+	common.ApiSuccess(c, gin.H{
+		"models":             pricing,
 		"vendors":            model.GetVendors(),
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,

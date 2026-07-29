@@ -99,6 +99,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		wg           sync.WaitGroup // 用于等待所有 goroutine 退出
 		cleanupOnce  sync.Once
 		stopOnce     sync.Once
+		scannerEnd   = relaycommon.StreamEndReasonEOF
 	)
 
 	stop := func() {
@@ -282,7 +283,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					return
 				}
 			} else {
-				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
+				scannerEnd = relaycommon.StreamEndReasonDone
 				logger.LogDebug(c, "received [DONE], stopping scanner")
 				return
 			}
@@ -294,7 +295,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
 			}
 		}
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
 	})
 
 	// Only this goroutine owns the timer. Meaningful events switch the initial
@@ -325,6 +325,11 @@ waitForStream:
 	}
 
 	cleanup()
+	// Scanner completion is only committed after queued data handlers finish.
+	// A fatal conversion/write outcome must take precedence over DONE or EOF.
+	if info.StreamStatus.EndReason == relaycommon.StreamEndReasonNone {
+		info.StreamStatus.SetEndReason(scannerEnd, nil)
+	}
 	if info.StreamStatus.IsNormalEnd() && !info.StreamStatus.HasErrors() {
 		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
 	} else {

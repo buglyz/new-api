@@ -12,7 +12,9 @@ func PersonalCircuitCanAttempt(channelID int, modelName string) bool {
 	return !operation_setting.SelfUseModeEnabled || personalCircuits.canAttempt(channelID, modelName)
 }
 
-func ClaimPersonalCircuit(channelID int, modelName string) bool {
+// ClaimPersonalCircuit accepts the retired force argument for source
+// compatibility only. Cooldowns are always enforced by the manager.
+func ClaimPersonalCircuit(channelID int, modelName string, _ ...bool) bool {
 	return !operation_setting.SelfUseModeEnabled || personalCircuits.claim(channelID, modelName)
 }
 

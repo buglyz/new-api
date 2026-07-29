@@ -139,6 +139,21 @@ func TestPersonalCircuitGateIsDisabledInStandardMode(t *testing.T) {
 	assert.True(t, ClaimPersonalCircuit(1, "model"))
 }
 
+func TestClaimPersonalCircuitLegacyForceCannotBypassCooldown(t *testing.T) {
+	previousMode := operation_setting.SelfUseModeEnabled
+	previousCircuits := personalCircuits
+	operation_setting.SelfUseModeEnabled = true
+	personalCircuits = newPersonalCircuitManager(time.Now)
+	t.Cleanup(func() {
+		operation_setting.SelfUseModeEnabled = previousMode
+		personalCircuits = previousCircuits
+	})
+
+	personalCircuits.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+
+	assert.False(t, ClaimPersonalCircuit(1, "model", true))
+}
+
 func TestResetPersonalCircuitsClearsEveryModelForAChannel(t *testing.T) {
 	previousMode := operation_setting.SelfUseModeEnabled
 	previousCircuits := personalCircuits
