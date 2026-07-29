@@ -103,7 +103,7 @@ func (m *personalCircuitManager) canAttempt(channelID int, modelName string) boo
 	}
 }
 
-func (m *personalCircuitManager) claim(channelID int, modelName string, force bool) bool {
+func (m *personalCircuitManager) claim(channelID int, modelName string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	entry := m.entryForAttemptLocked(channelID, modelName)
@@ -114,7 +114,7 @@ func (m *personalCircuitManager) claim(channelID int, modelName string, force bo
 	if entry.Status == PersonalCircuitHalfOpen && now.Unix() < entry.HalfOpenUntil {
 		return false
 	}
-	if entry.Status == PersonalCircuitOpen && !force && now.Unix() < entry.RetryAt {
+	if entry.Status == PersonalCircuitOpen && now.Unix() < entry.RetryAt {
 		return false
 	}
 	from := entry.Status

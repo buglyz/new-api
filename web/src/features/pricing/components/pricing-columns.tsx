@@ -49,9 +49,6 @@ import { ModelBillingModeBadge } from './model-billing-mode-badge'
 
 export interface PricingColumnsOptions {
   tokenUnit?: TokenUnit
-  priceRate?: number
-  usdExchangeRate?: number
-  showRechargePrice?: boolean
   selectedGroup?: string
 }
 
@@ -61,9 +58,6 @@ export function usePricingColumns(
   const { t } = useTranslation()
   const {
     tokenUnit = DEFAULT_TOKEN_UNIT,
-    priceRate = 1,
-    usdExchangeRate = 1,
-    showRechargePrice = false,
     selectedGroup,
   } = options
 
@@ -116,9 +110,6 @@ export function usePricingColumns(
         const model = row.original
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
-          showRechargePrice,
-          priceRate,
-          usdExchangeRate,
           groupRatioMultiplier: getDynamicDisplayGroupRatio(
             model,
             selectedGroup
@@ -182,9 +173,6 @@ export function usePricingColumns(
               model,
               'input',
               tokenUnit,
-              showRechargePrice,
-              priceRate,
-              usdExchangeRate,
               selectedGroup
             )
           )
@@ -193,9 +181,6 @@ export function usePricingColumns(
               model,
               'output',
               tokenUnit,
-              showRechargePrice,
-              priceRate,
-              usdExchangeRate,
               selectedGroup
             )
           )
@@ -215,13 +200,7 @@ export function usePricingColumns(
         }
 
         const price = stripTrailingZeros(
-          formatRequestPrice(
-            model,
-            showRechargePrice,
-            priceRate,
-            usdExchangeRate,
-            selectedGroup
-          )
+          formatRequestPrice(model, selectedGroup)
         )
 
         return (
@@ -245,9 +224,6 @@ export function usePricingColumns(
         const model = row.original
         const dynamicSummary = getDynamicPricingSummary(model, {
           tokenUnit,
-          showRechargePrice,
-          priceRate,
-          usdExchangeRate,
           groupRatioMultiplier: getDynamicDisplayGroupRatio(
             model,
             selectedGroup
@@ -293,9 +269,6 @@ export function usePricingColumns(
             model,
             'cache',
             tokenUnit,
-            showRechargePrice,
-            priceRate,
-            usdExchangeRate,
             selectedGroup
           )
         )

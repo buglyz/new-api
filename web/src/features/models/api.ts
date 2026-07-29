@@ -484,49 +484,6 @@ export async function getAvailableReplicas(params: {
 }
 
 /**
- * Estimate deployment price
- */
-export async function estimatePrice(params: {
-  location_ids: Array<string | number>
-  hardware_id: string | number
-  gpus_per_container: number
-  duration_hours: number
-  replica_count: number
-  currency?: string
-}): Promise<{
-  success: boolean
-  message?: string
-  data?: Record<string, unknown>
-}> {
-  const locationIds = (params.location_ids || [])
-    .map((x) => Number(x))
-    .filter((n) => Number.isInteger(n) && n > 0)
-  const hardwareId = Number(params.hardware_id)
-  const duration = Number(params.duration_hours)
-  const gpus = Number(params.gpus_per_container)
-  const replicaCount = Number(params.replica_count)
-  const currency =
-    typeof params.currency === 'string' && params.currency.trim()
-      ? params.currency.trim().toLowerCase()
-      : 'usdc'
-
-  const payload = {
-    location_ids: locationIds,
-    hardware_id: hardwareId,
-    gpus_per_container: gpus,
-    duration_hours: duration,
-    replica_count: replicaCount,
-    currency,
-    duration_type: 'hour',
-    duration_qty: duration,
-    hardware_qty: gpus,
-  }
-
-  const res = await api.post('/api/deployments/price-estimation', payload)
-  return res.data
-}
-
-/**
  * Create deployment
  */
 export async function createDeployment(data: {

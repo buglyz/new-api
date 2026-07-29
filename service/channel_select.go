@@ -191,31 +191,13 @@ func getRandomSatisfiedChannel(param *RetryParam, group string, retry int) (*mod
 
 	for {
 		channel, err := model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath, available)
-		if err != nil || channel == nil {
-			break
+		if err != nil {
+			return nil, err
 		}
-		if ClaimPersonalCircuit(channel.Id, param.ModelName, false) {
-			return channel, nil
+		if channel == nil {
+			return nil, nil
 		}
-		blocked[channel.Id] = struct{}{}
-	}
-
-	// If every otherwise eligible candidate is cooling down, reserve one
-	// half-open fallback. This keeps a personal gateway usable without allowing
-	// concurrent requests to stampede the same failing upstream.
-	fallbackFilter := func(channelID int) bool {
-		if _, used := attempted[channelID]; used {
-			return false
-		}
-		_, unavailable := blocked[channelID]
-		return !unavailable
-	}
-	for {
-		channel, err := model.GetRandomSatisfiedChannel(group, param.ModelName, retry, param.RequestPath, fallbackFilter)
-		if err != nil || channel == nil {
-			return channel, err
-		}
-		if ClaimPersonalCircuit(channel.Id, param.ModelName, true) {
+		if ClaimPersonalCircuit(channel.Id, param.ModelName) {
 			return channel, nil
 		}
 		blocked[channel.Id] = struct{}{}

@@ -64,7 +64,6 @@ import {
 import {
   checkClusterNameAvailability,
   createDeployment,
-  estimatePrice,
   getAvailableReplicas,
   getHardwareTypes,
 } from '../../api'
@@ -89,7 +88,6 @@ const schema = z.object({
   args: z.string().optional(),
   registry_username: z.string().optional(),
   registry_secret: z.string().optional(),
-  currency: z.string().optional(),
 })
 
 // NOTE: react-hook-form resolver uses the schema input type (coerce input is unknown)
@@ -127,17 +125,14 @@ export function CreateDeploymentDrawer({
       args: '',
       registry_username: '',
       registry_secret: '',
-      currency: 'usdc',
     },
   })
 
   const hardwareId = form.watch('hardware_id')
   const gpuCount = toNumber(form.watch('gpus_per_container'), 1)
-  const locationIds = form.watch('location_ids')
   const durationHours = toNumber(form.watch('duration_hours'), 1)
   const replicaCount = toNumber(form.watch('replica_count'), 1)
   const trafficPort = toNumber(form.watch('traffic_port'), DEFAULT_TRAFFIC_PORT)
-  const currency = form.watch('currency')
   const resourceName = form.watch('resource_private_name')
 
   const { data: hardwareTypesData, isLoading: isLoadingHardware } = useQuery({
@@ -198,34 +193,6 @@ export function CreateDeploymentDrawer({
     })
     return Array.from(map.values())
   }, [replicasData])
-
-  const { data: priceData, isLoading: _isLoadingPrice } = useQuery({
-    queryKey: [
-      'deployment-price',
-      hardwareId,
-      gpuCount,
-      durationHours,
-      replicaCount,
-      locationIds,
-      currency,
-    ],
-    queryFn: () =>
-      estimatePrice({
-        location_ids: locationIds,
-        hardware_id: hardwareId,
-        gpus_per_container: gpuCount,
-        duration_hours: durationHours,
-        replica_count: replicaCount,
-        currency: currency || 'usdc',
-      }),
-    enabled:
-      open &&
-      Boolean(hardwareId) &&
-      gpuCount > 0 &&
-      durationHours > 0 &&
-      replicaCount > 0 &&
-      locationIds.length > 0,
-  })
 
   const { data: nameCheckData, isFetching: isCheckingName } = useQuery({
     queryKey: ['deployment-name-check', resourceName],
@@ -357,22 +324,8 @@ export function CreateDeploymentDrawer({
       args: '',
       registry_username: '',
       registry_secret: '',
-      currency: 'usdc',
     })
   }, [open, form])
-
-  const priceSummary = useMemo<string>(() => {
-    const est = priceData?.data
-    if (!est || typeof est !== 'object') return ''
-    const total =
-      (est as Record<string, unknown>)?.total_cost ??
-      (est as Record<string, unknown>)?.total ??
-      ''
-    const currency = (est as Record<string, unknown>)?.currency ?? ''
-    if (total === '' && currency === '') return ''
-    return `${total} ${currency}`.trim()
-  }, [priceData])
-  void priceSummary
 
   return (
     <Sheet
@@ -613,44 +566,6 @@ export function CreateDeploymentDrawer({
                   )}
                 />
               </div>
-            </SideDrawerSection>
-
-            {/* Price Estimation */}
-            <SideDrawerSection>
-              <h3 className='text-sm font-medium'>{t('Price estimation')}</h3>
-              <p className='text-muted-foreground text-xs'>
-                {t('Price estimation description')}
-              </p>
-
-              <FormField
-                control={form.control}
-                name='currency'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Billing currency')}</FormLabel>
-                    <Select
-                      items={[
-                        { value: 'usdc', label: 'USDC' },
-                        { value: 'iocoin', label: 'IOCOIN' },
-                      ]}
-                      value={field.value || 'usdc'}
-                      onValueChange={(v) => field.onChange(v)}
-                    >
-                      <FormControl>
-                        <SelectTrigger className='w-full'>
-                          <SelectValue placeholder={t('Select')} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          <SelectItem value='usdc'>USDC</SelectItem>
-                          <SelectItem value='iocoin'>IOCOIN</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
             </SideDrawerSection>
 
             {/* Advanced Configuration */}

@@ -16,18 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
-
-import { estimatePrice, extendDeployment, getDeployment } from '../../api'
+import { extendDeployment } from '../../api'
 import { deploymentsQueryKeys } from '../../lib'
 
 function toInt(value: unknown, fallback: number) {
@@ -52,83 +50,6 @@ export function ExtendDeploymentDialog({
   useEffect(() => {
     if (open) setHours(1)
   }, [open])
-
-  const { data: detailsRes, isLoading: isLoadingDetails } = useQuery({
-    queryKey: ['deployment-details-for-extend', deploymentId],
-    queryFn: () => (deploymentId ? getDeployment(deploymentId) : null),
-    enabled: open && deploymentId !== null,
-  })
-
-  const details = detailsRes?.data
-
-  const priceParams = useMemo(() => {
-    if (!details) return null
-    const hardwareId = toInt(details.hardware_id, 0)
-    const gpusPerContainer = toInt(details.gpus_per_container, 0)
-    const replicaCount = toInt(details.total_containers, 0)
-    const locations = Array.isArray(details.locations) ? details.locations : []
-    const locationIds = locations
-      .map((x) => {
-        if (!x || typeof x !== 'object') return 0
-        return toInt((x as Record<string, unknown>)?.id, 0)
-      })
-      .filter((x) => x > 0)
-
-    if (
-      hardwareId <= 0 ||
-      gpusPerContainer <= 0 ||
-      replicaCount <= 0 ||
-      locationIds.length === 0
-    ) {
-      return null
-    }
-
-    return {
-      hardware_id: hardwareId,
-      gpus_per_container: gpusPerContainer,
-      replica_count: replicaCount,
-      location_ids: locationIds,
-    }
-  }, [details])
-
-  const {
-    data: priceRes,
-    isLoading: isLoadingPrice,
-    isFetching: isFetchingPrice,
-  } = useQuery({
-    queryKey: ['deployment-extend-price', deploymentId, hours, priceParams],
-    queryFn: () =>
-      priceParams
-        ? estimatePrice({
-            location_ids: priceParams.location_ids,
-            hardware_id: priceParams.hardware_id,
-            gpus_per_container: priceParams.gpus_per_container,
-            replica_count: priceParams.replica_count,
-            duration_hours: hours,
-            currency: 'usdc',
-          })
-        : null,
-    enabled: open && Boolean(priceParams) && hours > 0,
-  })
-
-  const priceSummary = useMemo(() => {
-    const data = priceRes?.data
-    if (!data || typeof data !== 'object') return ''
-    const record = data as Record<string, unknown>
-    const breakdown = record.price_breakdown
-    let total: unknown = record.total_cost
-    if (
-      breakdown &&
-      typeof breakdown === 'object' &&
-      !Array.isArray(breakdown)
-    ) {
-      const b = breakdown as Record<string, unknown>
-      total = b.total_cost ?? b.totalCost ?? b.TotalCost ?? total
-    }
-    const currency = record.currency ?? 'USDC'
-    if (total === undefined || total === null) return ''
-    return `${String(total)} ${String(currency).toUpperCase()}`.trim()
-  }, [priceRes])
 
   const canSubmit = Boolean(deploymentId) && hours > 0 && !isSubmitting
 
@@ -182,54 +103,25 @@ export function ExtendDeploymentDialog({
         </>
       }
     >
-      {isLoadingDetails ? (
-        <div className='flex items-center justify-center py-10'>
-          <Loader2 className='text-muted-foreground h-6 w-6 animate-spin' />
+      <div className='space-y-4'>
+        <div className='text-muted-foreground text-sm'>
+          {t('Deployment ID')}:{' '}
+          <span className='font-mono'>{deploymentId}</span>
         </div>
-      ) : (
-        <div className='space-y-4'>
-          <div className='text-muted-foreground text-sm'>
-            {t('Deployment ID')}:{' '}
-            <span className='font-mono'>{deploymentId}</span>
-          </div>
 
-          <div className='space-y-2'>
-            <div className='text-sm font-medium'>{t('Duration (hours)')}</div>
-            <Input
-              type='number'
-              min={1}
-              value={hours}
-              onChange={(e) => setHours(toInt(e.target.value, 1))}
-            />
-            <div className='text-muted-foreground text-xs'>
-              {t('This will extend the deployment by the specified hours.')}
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className='space-y-1'>
-            <div className='text-sm font-medium'>{t('Estimated cost')}</div>
-            <div className='text-muted-foreground text-sm'>
-              {isLoadingPrice || isFetchingPrice ? (
-                <span className='inline-flex items-center gap-2'>
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                  {t('Calculating...')}
-                </span>
-              ) : priceParams ? (
-                priceSummary || t('Not available')
-              ) : (
-                t('Not available')
-              )}
-            </div>
-            {!priceParams ? (
-              <div className='text-muted-foreground text-xs'>
-                {t('Unable to estimate price for this deployment.')}
-              </div>
-            ) : null}
+        <div className='space-y-2'>
+          <div className='text-sm font-medium'>{t('Duration (hours)')}</div>
+          <Input
+            type='number'
+            min={1}
+            value={hours}
+            onChange={(e) => setHours(toInt(e.target.value, 1))}
+          />
+          <div className='text-muted-foreground text-xs'>
+            {t('This will extend the deployment by the specified hours.')}
           </div>
         </div>
-      )}
+      </div>
     </Dialog>
   )
 }

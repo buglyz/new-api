@@ -34,18 +34,19 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 	manager.recordFailure(3, "low-sla", "model-a", attempt)
 	circuits, _ := manager.snapshot()
 	assert.Equal(t, now.Add(30*time.Second).Unix(), circuits[0].RetryAt)
+	assert.False(t, manager.claim(3, "model-a"))
 
 	now = now.Add(30 * time.Second)
 	assert.True(t, manager.canAttempt(3, "model-a"))
-	assert.True(t, manager.claim(3, "model-a", false))
-	assert.False(t, manager.claim(3, "model-a", false))
+	assert.True(t, manager.claim(3, "model-a"))
+	assert.False(t, manager.claim(3, "model-a"))
 
 	manager.recordFailure(3, "low-sla", "model-a", attempt)
 	circuits, _ = manager.snapshot()
 	assert.Equal(t, now.Add(60*time.Second).Unix(), circuits[0].RetryAt)
 
 	now = now.Add(60 * time.Second)
-	assert.True(t, manager.claim(3, "model-a", false))
+	assert.True(t, manager.claim(3, "model-a"))
 	transitions := manager.recordSuccess(3, "model-a")
 	require.Len(t, transitions, 1)
 	assert.Equal(t, PersonalCircuitClosed, transitions[0].To)
@@ -135,7 +136,7 @@ func TestPersonalCircuitGateIsDisabledInStandardMode(t *testing.T) {
 	})
 
 	assert.True(t, PersonalCircuitCanAttempt(1, "model"))
-	assert.True(t, ClaimPersonalCircuit(1, "model", false))
+	assert.True(t, ClaimPersonalCircuit(1, "model"))
 }
 
 func TestResetPersonalCircuitsClearsEveryModelForAChannel(t *testing.T) {

@@ -12,8 +12,8 @@ func PersonalCircuitCanAttempt(channelID int, modelName string) bool {
 	return !operation_setting.SelfUseModeEnabled || personalCircuits.canAttempt(channelID, modelName)
 }
 
-func ClaimPersonalCircuit(channelID int, modelName string, force bool) bool {
-	return !operation_setting.SelfUseModeEnabled || personalCircuits.claim(channelID, modelName, force)
+func ClaimPersonalCircuit(channelID int, modelName string) bool {
+	return !operation_setting.SelfUseModeEnabled || personalCircuits.claim(channelID, modelName)
 }
 
 func RecordPersonalCircuitFailure(channelID int, channelName, modelName string, attempt RelayAttempt) {
