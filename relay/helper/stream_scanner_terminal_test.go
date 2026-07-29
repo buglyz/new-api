@@ -1,12 +1,13 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,4 +58,14 @@ func TestStreamScannerHandlerFatalStopOverridesQueuedDone(t *testing.T) {
 	require.NotNil(t, info.StreamStatus)
 	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
 	assert.True(t, info.StreamStatus.HasErrors())
+}
+
+func TestStreamRelayErrorIgnoresClientCancellationDuringWrite(t *testing.T) {
+	info := &relaycommon.RelayInfo{StreamStatus: relaycommon.NewStreamStatus()}
+	info.StreamStatus.SetEndReason(
+		relaycommon.StreamEndReasonHandlerStop,
+		fmt.Errorf("request context done: %w", context.Canceled),
+	)
+
+	assert.Nil(t, streamRelayError(info))
 }

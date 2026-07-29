@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,9 +15,9 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
 
@@ -27,6 +28,8 @@ const (
 	InitialScannerBufferSize    = 64 << 10  // 64KB (64*1024)
 	DefaultMaxScannerBufferSize = 128 << 20 // 64MB (64*1024*1024) default SSE buffer size
 	DefaultPingInterval         = 10 * time.Second
+	defaultFirstEventTimeout    = 35 * time.Second
+	defaultStreamingTimeout     = 90 * time.Second
 	// streamWriteTimeout bounds a single blocked write to a slow client so the
 	// unconditional wg.Wait() in cleanup can always finish. Without it, a slow
 	// but connected client (full TCP buffer, no server WriteTimeout) could hang
@@ -88,6 +91,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	firstEventTimeout := time.Duration(constant.StreamFirstEventTimeout) * time.Second
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	if firstEventTimeout <= 0 {
+		firstEventTimeout = defaultFirstEventTimeout
+	}
+	if streamingTimeout <= 0 {
+		streamingTimeout = defaultStreamingTimeout
+	}
 
 	var (
 		stopChan     = make(chan bool, 3) // 增加缓冲区避免阻塞
@@ -342,11 +351,16 @@ func streamRelayError(info *relaycommon.RelayInfo) *types.NewAPIError {
 	if info == nil || info.StreamStatus == nil {
 		return nil
 	}
-	if info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone || info.StreamStatus.EndReason == relaycommon.StreamEndReasonEOF {
+	status := info.StreamStatus
+	if status.EndReason == relaycommon.StreamEndReasonDone || status.EndReason == relaycommon.StreamEndReasonEOF {
+		return nil
+	}
+	if status.EndReason == relaycommon.StreamEndReasonClientGone ||
+		(status.EndReason == relaycommon.StreamEndReasonHandlerStop &&
+			(errors.Is(status.EndError, context.Canceled) || errors.Is(status.EndError, context.DeadlineExceeded))) {
 		return nil
 	}
 
-	status := info.StreamStatus
 	streamErr := fmt.Errorf("upstream stream ended abnormally: %s", status.Summary())
 	options := make([]types.NewAPIErrorOptions, 0, 2)
 	if info.ReceivedResponseCount > 0 {
