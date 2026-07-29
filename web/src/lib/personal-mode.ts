@@ -38,7 +38,6 @@ const PUBLIC_DISABLED_PATHS = new Set([
   '/reset',
   '/user/reset',
   '/oauth',
-  '/pricing',
   '/rankings',
   '/about',
   '/user-agreement',
@@ -91,7 +90,6 @@ export function getPersonalModeRedirect(
   const publicDisabled =
     PUBLIC_DISABLED_PATHS.has(path) ||
     isPathOrChild(path, '/oauth') ||
-    isPathOrChild(path, '/pricing') ||
     isPathOrChild(path, '/rankings') ||
     isPathOrChild(path, '/about')
   if (publicDisabled) return authenticated ? '/dashboard' : '/sign-in'

@@ -58,7 +58,6 @@ export function Profile() {
             <ProfileHeader
               profile={profile}
               loading={loading}
-              personalMode={personalMode}
             />
           </CardStaggerItem>
 

@@ -119,13 +119,8 @@ export async function renderSummaryMode(
     path: '/',
     component: dependencies.SummaryCards,
   })
-  const walletRoute = dependencies.createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/wallet',
-    component: () => null,
-  })
   const router = dependencies.createRouter({
-    routeTree: rootRoute.addChildren([indexRoute, walletRoute]),
+    routeTree: rootRoute.addChildren([indexRoute]),
     history: dependencies.createMemoryHistory({ initialEntries: ['/'] }),
   })
   const container = document.createElement('div')

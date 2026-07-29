@@ -39,7 +39,6 @@ func TestSelfUseOnlyAPIRouteContract(t *testing.T) {
 		http.MethodPost + " /api/user/register",
 		http.MethodGet + " /api/user/groups",
 		http.MethodGet + " /api/oauth/:provider",
-		http.MethodGet + " /api/pricing",
 		http.MethodGet + " /api/rankings",
 		http.MethodGet + " /api/user/aff",
 		http.MethodPost + " /api/user/topup",
@@ -60,6 +59,7 @@ func TestSelfUseOnlyAPIRouteContract(t *testing.T) {
 		http.MethodGet + " /api/channel/",
 		http.MethodGet + " /api/channel/reliability",
 		http.MethodGet + " /api/token/",
+		http.MethodGet + " /api/pricing",
 		http.MethodGet + " /api/log/",
 	}
 	for _, route := range retainedRoutes {

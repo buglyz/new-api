@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Activity, BarChart3, WalletCards } from 'lucide-react'
+import { Activity } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
@@ -25,9 +25,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
+import { formatCompactNumber } from '@/lib/format'
 import { getRoleLabel } from '@/lib/roles'
-import { cn } from '@/lib/utils'
 
 import { getDisplayName } from '../lib'
 import type { UserProfile } from '../types'
@@ -39,7 +38,6 @@ import type { UserProfile } from '../types'
 interface ProfileHeaderProps {
   profile: UserProfile | null
   loading: boolean
-  personalMode: boolean
 }
 
 export function ProfileHeader(props: ProfileHeaderProps) {
@@ -65,16 +63,8 @@ export function ProfileHeader(props: ProfileHeaderProps) {
           </div>
         </CardContent>
         <div className='border-t'>
-          <div
-            className={cn(
-              'divide-border/60 grid grid-cols-1 divide-y sm:divide-y-0',
-              !props.personalMode && 'sm:grid-cols-3 sm:divide-x'
-            )}
-          >
-            {(props.personalMode
-              ? ['requests']
-              : ['balance', 'usage', 'requests']
-            ).map((key) => (
+          <div className='divide-border/60 grid grid-cols-1 divide-y sm:divide-y-0'>
+            {['requests'].map((key) => (
               <div key={key} className='px-4 py-3.5 sm:px-5 sm:py-4'>
                 <Skeleton className='h-3.5 w-20' />
                 <Skeleton className='mt-2 h-7 w-28' />
@@ -98,7 +88,7 @@ export function ProfileHeader(props: ProfileHeaderProps) {
     label: string
     value: string
     description: string
-    icon: typeof WalletCards
+    icon: typeof Activity
     tone: IconBadgeTone
   }[] = [
     {
@@ -109,25 +99,6 @@ export function ProfileHeader(props: ProfileHeaderProps) {
       tone: 'chart-4',
     },
   ]
-  if (!props.personalMode) {
-    stats.unshift(
-      {
-        label: t('Current Balance'),
-        value: formatQuota(props.profile.quota),
-        description: t('Remaining quota'),
-        icon: WalletCards,
-        tone: 'success',
-      },
-      {
-        label: t('Total Usage'),
-        value: formatQuota(props.profile.used_quota),
-        description: t('Total consumed quota'),
-        icon: BarChart3,
-        tone: 'info',
-      }
-    )
-  }
-
   return (
     <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
       <CardContent className='p-3 sm:p-5'>
@@ -177,12 +148,7 @@ export function ProfileHeader(props: ProfileHeaderProps) {
         </div>
       </CardContent>
       <div className='border-t'>
-        <div
-          className={cn(
-            'divide-border/60 grid divide-x',
-            props.personalMode ? 'grid-cols-1' : 'grid-cols-3'
-          )}
-        >
+        <div className='divide-border/60 grid grid-cols-1 divide-x'>
           {stats.map((item) => (
             <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
               <div className='flex items-center gap-2'>

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -19,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -247,15 +245,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	info.IsChannelTest = true
 	info.InitChannelMeta(c)
 
-	err = attachTestBillingRequestInput(info, request)
-	if err != nil {
-		return testResult{
-			context:     c,
-			localErr:    err,
-			newAPIError: types.NewError(err, types.ErrorCodeJsonMarshalFailed),
-		}
-	}
-
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
 		return testResult{
@@ -292,15 +281,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	//logInfo := info
 	//logInfo.ApiKey = ""
 	common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
-
-	priceData, err := helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
-	if err != nil {
-		return testResult{
-			context:     c,
-			localErr:    err,
-			newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest)),
-		}
-	}
 
 	adaptor.Init(info)
 
@@ -492,18 +472,21 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 	info.SetEstimatePromptTokens(usage.PromptTokens)
 
-	quota, tieredResult := settleTestQuota(info, priceData, usage)
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
-	other := buildTestLogOther(c, info, priceData, usage, tieredResult)
+	other := map[string]interface{}{
+		"request_path":        c.Request.URL.Path,
+		"upstream_model_name": info.UpstreamModelName,
+		"cache_tokens":        usage.PromptTokensDetails.CachedTokens,
+	}
 	model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
 		ChannelId:        channel.Id,
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ModelName:        info.OriginModelName,
 		TokenName:        "模型测试",
-		Quota:            quota,
+		Quota:            0,
 		Content:          "模型测试",
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
@@ -516,50 +499,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		localErr:    nil,
 		newAPIError: nil,
 	}
-}
-
-func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Request) error {
-	if info == nil {
-		return nil
-	}
-
-	input, err := helper.BuildBillingExprRequestInputFromRequest(request, info.RequestHeaders)
-	if err != nil {
-		return err
-	}
-	info.BillingRequestInput = &input
-	return nil
-}
-
-func settleTestQuota(info *relaycommon.RelayInfo, priceData types.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult) {
-	if usage != nil && info != nil && info.TieredBillingSnapshot != nil {
-		isClaudeUsageSemantic := usage.UsageSemantic == "anthropic" || info.GetFinalRequestRelayFormat() == types.RelayFormatClaude
-		usedVars := billingexpr.UsedVars(info.TieredBillingSnapshot.ExprString)
-		if ok, quota, result := service.TryTieredSettle(info, service.BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)); ok {
-			return quota, result
-		}
-	}
-
-	quota := 0
-	if !priceData.UsePrice {
-		quota = usage.PromptTokens + int(math.Round(float64(usage.CompletionTokens)*priceData.CompletionRatio))
-		quota = int(math.Round(float64(quota) * priceData.ModelRatio))
-		if priceData.ModelRatio != 0 && quota <= 0 {
-			quota = 1
-		}
-		return quota, nil
-	}
-
-	return int(priceData.ModelPrice * common.QuotaPerUnit), nil
-}
-
-func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData types.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {
-	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio,
-		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio)
-	if tieredResult != nil {
-		service.InjectTieredBillingInfo(other, info, tieredResult)
-	}
-	return other
 }
 
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {

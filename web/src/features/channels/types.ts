@@ -190,13 +190,6 @@ export interface ChannelTestResponse {
   }
 }
 
-export interface ChannelBalanceResponse {
-  success: boolean
-  message?: string
-  balance?: number
-  currency?: string
-}
-
 export interface FetchModelsResponse {
   success: boolean
   message?: string

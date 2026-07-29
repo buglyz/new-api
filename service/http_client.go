@@ -89,6 +89,11 @@ func newRelayHTTPTransport() *http.Transport {
 	transport.MaxIdleConns = common.RelayMaxIdleConns
 	transport.MaxIdleConnsPerHost = common.RelayMaxIdleConnsPerHost
 	transport.IdleConnTimeout = time.Duration(common.RelayIdleConnTimeout) * time.Second
+	transport.ResponseHeaderTimeout = time.Duration(common.RelayResponseHeaderTimeout) * time.Second
+	transport.DialContext = (&net.Dialer{
+		Timeout:   time.Duration(common.RelayConnectTimeout) * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
 	transport.ForceAttemptHTTP2 = true
 	if common.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = common.InsecureTLSConfig
@@ -97,14 +102,10 @@ func newRelayHTTPTransport() *http.Transport {
 }
 
 func newRelayHTTPClient(transport *http.Transport) *http.Client {
-	client := &http.Client{
+	return &http.Client{
 		Transport:     transport,
 		CheckRedirect: checkRedirect,
 	}
-	if common.RelayTimeout != 0 {
-		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
-	}
-	return client
 }
 
 func InitHttpClient() {
@@ -237,7 +238,7 @@ func newProxyHTTPClient(proxyURL *url.URL) (*http.Client, error) {
 	case "socks5", "socks5h":
 		transport.Proxy = nil
 		forwardDialer := &net.Dialer{
-			Timeout:   30 * time.Second,
+			Timeout:   time.Duration(common.RelayConnectTimeout) * time.Second,
 			KeepAlive: 30 * time.Second,
 		}
 		dialer, err := proxy.FromURL(proxyURL, forwardDialer)

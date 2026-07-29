@@ -30,9 +30,6 @@ function apiKey(overrides: Partial<ApiKey> = {}): ApiKey {
     name: 'client',
     key: 'abcd**********wxyz',
     status: 1,
-    remain_quota: 100,
-    used_quota: 0,
-    unlimited_quota: false,
     expired_time: NOW + 30 * 24 * 60 * 60,
     created_time: NOW - 100,
     accessed_time: NOW - 100,
@@ -50,28 +47,21 @@ describe('API key attention classification', () => {
     assert.deepEqual(getApiKeyAttentionReasons(apiKey(), NOW), [])
   })
 
-  test('classifies expiry, quota, inactivity, and missing restrictions', () => {
+  test('classifies expiry, inactivity, and missing restrictions', () => {
     assert.deepEqual(
       getApiKeyAttentionReasons(
         apiKey({
           expired_time: NOW + 7 * 24 * 60 * 60,
-          remain_quota: 0,
           accessed_time: NOW - 90 * 24 * 60 * 60 - 1,
           model_limits_enabled: false,
         }),
         NOW
       ),
-      ['expiring_soon', 'exhausted', 'long_unused', 'no_model_limits']
+      ['expiring_soon', 'long_unused', 'no_model_limits']
     )
   })
 
-  test('classifies only the combined unlimited lifetime and quota risk', () => {
-    assert.deepEqual(
-      getApiKeyAttentionReasons(
-        apiKey({ expired_time: -1, unlimited_quota: true }),
-        NOW
-      ),
-      ['unbounded']
-    )
+  test('does not flag an active non-expiring key', () => {
+    assert.deepEqual(getApiKeyAttentionReasons(apiKey({ expired_time: -1 }), NOW), [])
   })
 })

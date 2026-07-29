@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -85,6 +86,10 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+	retryAfterSeconds := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+	defer func() {
+		newApiErr.SetRetryAfterSeconds(retryAfterSeconds)
+	}()
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -134,6 +139,28 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
 	return
+}
+
+func parseRetryAfter(value string, now time.Time) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds > 0 {
+			return seconds
+		}
+		return 0
+	}
+	retryAt, err := http.ParseTime(value)
+	if err != nil {
+		return 0
+	}
+	seconds := int(math.Ceil(retryAt.Sub(now).Seconds()))
+	if seconds < 1 {
+		return 0
+	}
+	return seconds
 }
 
 func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) {

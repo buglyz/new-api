@@ -26,16 +26,17 @@ const (
 )
 
 type RelayAttempt struct {
-	Index       int                 `json:"index"`
-	ChannelID   int                 `json:"channel_id"`
-	Model       string              `json:"model"`
-	StartedAtMs int64               `json:"started_at_ms"`
-	DurationMs  int64               `json:"duration_ms"`
-	Outcome     RelayAttemptOutcome `json:"outcome"`
-	StatusCode  int                 `json:"status_code,omitempty"`
-	ErrorCode   string              `json:"error_code,omitempty"`
-	Retried     bool                `json:"retried"`
-	startedAt   time.Time
+	Index             int                 `json:"index"`
+	ChannelID         int                 `json:"channel_id"`
+	Model             string              `json:"model"`
+	StartedAtMs       int64               `json:"started_at_ms"`
+	DurationMs        int64               `json:"duration_ms"`
+	Outcome           RelayAttemptOutcome `json:"outcome"`
+	StatusCode        int                 `json:"status_code,omitempty"`
+	ErrorCode         string              `json:"error_code,omitempty"`
+	RetryAfterSeconds int                 `json:"retry_after_seconds,omitempty"`
+	Retried           bool                `json:"retried"`
+	startedAt         time.Time
 }
 
 type RelayAttemptTrace struct {
@@ -103,6 +104,7 @@ func completeRelayAttempt(c *gin.Context, index int, outcome RelayAttemptOutcome
 	if relayErr != nil {
 		attempt.StatusCode = relayErr.StatusCode
 		attempt.ErrorCode = string(relayErr.GetErrorCode())
+		attempt.RetryAfterSeconds = relayErr.RetryAfterSeconds()
 	}
 	return *attempt
 }

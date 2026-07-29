@@ -371,7 +371,7 @@ func TestUpdateVideoTasksMixedChannelSleepSettings(t *testing.T) {
 	assert.ElementsMatch(t, []string{"upstream_sleepy_1", "upstream_fast_1", "upstream_fast_2"}, adaptor.fetchedTaskIDs())
 }
 
-func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
+func TestUpdateSunoTasksStalePollsClearLegacyQuotaWithoutBalances(t *testing.T) {
 	truncate(t)
 
 	const userID, tokenID, channelID = 401, 401, 401
@@ -420,9 +420,9 @@ func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
 	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
 	assert.EqualValues(t, model.TaskStatusFailure, reloaded.Status)
 	assert.Zero(t, reloaded.Quota)
-	assert.Equal(t, initialUserQuota+taskQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota+taskQuota, getTokenRemainQuota(t, tokenID))
-	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, initialUserQuota, getUserQuota(t, userID))
+	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, int64(0), countLogs(t))
 }
 
 func TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask(t *testing.T) {
@@ -453,7 +453,7 @@ func TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask(t *testing.T) {
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
-func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
+func TestSweepTimedOutTasksClearsQuotaWithoutChangingBalances(t *testing.T) {
 	truncate(t)
 
 	const (
@@ -492,6 +492,6 @@ func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
 	assert.Zero(t, reloadedModern.Quota)
 	assert.Contains(t, reloadedLegacy.FailReason, "旧系统遗留任务")
 	assert.Contains(t, reloadedModern.FailReason, "任务超时")
-	assert.Equal(t, initialQuota+modernTaskQuota, getUserQuota(t, userID))
-	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, initialQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(0), countLogs(t))
 }

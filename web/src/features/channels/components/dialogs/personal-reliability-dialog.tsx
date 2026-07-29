@@ -169,7 +169,11 @@ export function PersonalReliabilityDialog(props: {
                 className='flex flex-wrap items-center gap-2 px-3 py-2'
               >
                 <span className='font-mono'>#{circuit.channel_id}</span>
-                <span className='min-w-0 flex-1 truncate'>{circuit.model}</span>
+                <span className='min-w-0 flex-1 truncate'>
+                  {circuit.scope === 'channel'
+                    ? t('All models')
+                    : circuit.model}
+                </span>
                 {circuit.last_status_code && (
                   <span>HTTP {circuit.last_status_code}</span>
                 )}

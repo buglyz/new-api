@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { DEFAULT_DISCOUNT_RATE } from '../constants'
+const DEFAULT_DISCOUNT_RATE = 1
 
 // ============================================================================
 // Wallet-specific Formatting Functions

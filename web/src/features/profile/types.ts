@@ -45,26 +45,12 @@ export interface UserProfile {
   email?: string
   /** User group */
   group: string
-  /** Current quota balance */
-  quota: number
-  /** Total used quota */
-  used_quota: number
   /** Total request count */
   request_count: number
   /** Account status (1=启用, 2=禁用, 3=待审核, 4=已删除) */
   status: number
   /** Access token (system token) */
   access_token?: string
-  /** Affiliate code */
-  aff_code?: string
-  /** Number of successful affiliate invites */
-  aff_count: number
-  /** Affiliate quota (pending rewards) */
-  aff_quota: number
-  /** Total affiliate quota earned (historical) */
-  aff_history_quota: number
-  /** Invite user ID */
-  invite_user_id?: number
   /** Account creation timestamp */
   created_time: number
   /** User settings (JSON string) */

@@ -88,14 +88,28 @@ const (
 )
 
 type NewAPIError struct {
-	Err            error
-	RelayError     any
-	skipRetry      bool
-	recordErrorLog *bool
-	errorType      ErrorType
-	errorCode      ErrorCode
-	StatusCode     int
-	Metadata       json.RawMessage
+	Err               error
+	RelayError        any
+	skipRetry         bool
+	recordErrorLog    *bool
+	errorType         ErrorType
+	errorCode         ErrorCode
+	StatusCode        int
+	Metadata          json.RawMessage
+	retryAfterSeconds int
+}
+
+func (e *NewAPIError) RetryAfterSeconds() int {
+	if e == nil {
+		return 0
+	}
+	return e.retryAfterSeconds
+}
+
+func (e *NewAPIError) SetRetryAfterSeconds(seconds int) {
+	if e != nil && seconds > 0 {
+		e.retryAfterSeconds = seconds
+	}
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.

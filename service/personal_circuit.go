@@ -5,9 +5,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/bytedance/gopkg/util/gopool"
 )
 
 type PersonalCircuitStatus string
@@ -20,16 +17,19 @@ const (
 	personalCircuitBaseBackoff       = 30 * time.Second
 	personalCircuitMaxBackoff        = 15 * time.Minute
 	personalCircuitModelBackoff      = 30 * time.Minute
+	personalCircuitChannelBackoff    = 15 * time.Minute
 	personalCircuitHalfOpenLease     = 30 * time.Second
 	personalCircuitNotifySuppression = 10 * time.Minute
 	personalCircuitMaxEntries        = 4096
 	personalCircuitMaxNotifications  = 1024
+	personalCircuitAllModels         = "*"
 )
 
 type PersonalCircuit struct {
 	ChannelID           int                   `json:"channel_id"`
 	ChannelName         string                `json:"channel_name,omitempty"`
 	Model               string                `json:"model"`
+	Scope               string                `json:"scope"`
 	Status              PersonalCircuitStatus `json:"status"`
 	ConsecutiveFailures int                   `json:"consecutive_failures"`
 	OpenedAt            int64                 `json:"opened_at"`
@@ -54,11 +54,12 @@ type PersonalCircuitTransition struct {
 }
 
 type PersonalCircuitPolicy struct {
-	BaseBackoffSeconds   int64 `json:"base_backoff_seconds"`
-	MaxBackoffSeconds    int64 `json:"max_backoff_seconds"`
-	ModelBackoffSeconds  int64 `json:"model_backoff_seconds"`
-	HalfOpenLeaseSeconds int64 `json:"half_open_lease_seconds"`
-	Volatile             bool  `json:"volatile"`
+	BaseBackoffSeconds    int64 `json:"base_backoff_seconds"`
+	MaxBackoffSeconds     int64 `json:"max_backoff_seconds"`
+	ModelBackoffSeconds   int64 `json:"model_backoff_seconds"`
+	ChannelBackoffSeconds int64 `json:"channel_backoff_seconds"`
+	HalfOpenLeaseSeconds  int64 `json:"half_open_lease_seconds"`
+	Volatile              bool  `json:"volatile"`
 }
 
 type personalCircuitKey struct {
@@ -87,7 +88,7 @@ var personalCircuits = newPersonalCircuitManager(time.Now)
 func (m *personalCircuitManager) canAttempt(channelID int, modelName string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	entry := m.entries[personalCircuitKey{channelID: channelID, model: modelName}]
+	entry := m.entryForAttemptLocked(channelID, modelName)
 	if entry == nil {
 		return true
 	}
@@ -105,8 +106,7 @@ func (m *personalCircuitManager) canAttempt(channelID int, modelName string) boo
 func (m *personalCircuitManager) claim(channelID int, modelName string, force bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := personalCircuitKey{channelID: channelID, model: modelName}
-	entry := m.entries[key]
+	entry := m.entryForAttemptLocked(channelID, modelName)
 	if entry == nil {
 		return true
 	}
@@ -131,6 +131,13 @@ func (m *personalCircuitManager) claim(channelID int, modelName string, force bo
 	return true
 }
 
+func (m *personalCircuitManager) entryForAttemptLocked(channelID int, modelName string) *PersonalCircuit {
+	if entry := m.entries[personalCircuitKey{channelID: channelID, model: personalCircuitAllModels}]; entry != nil {
+		return entry
+	}
+	return m.entries[personalCircuitKey{channelID: channelID, model: modelName}]
+}
+
 func (m *personalCircuitManager) recordFailure(channelID int, channelName, modelName string, attempt RelayAttempt) *PersonalCircuitTransition {
 	if !opensPersonalCircuit(attempt.Outcome) || channelID <= 0 || modelName == "" {
 		return nil
@@ -138,12 +145,24 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.now()
-	key := personalCircuitKey{channelID: channelID, model: modelName}
+	circuitModel := personalCircuitModel(attempt.Outcome, modelName)
+	globalKey := personalCircuitKey{channelID: channelID, model: personalCircuitAllModels}
+	if m.entries[globalKey] != nil {
+		circuitModel = personalCircuitAllModels
+	}
+	key := personalCircuitKey{channelID: channelID, model: circuitModel}
+	if circuitModel == personalCircuitAllModels {
+		for existingKey := range m.entries {
+			if existingKey.channelID == channelID && existingKey != key {
+				delete(m.entries, existingKey)
+			}
+		}
+	}
 	entry := m.entries[key]
 	from := PersonalCircuitClosed
 	if entry == nil {
 		m.pruneEntriesLocked()
-		entry = &PersonalCircuit{ChannelID: channelID, Model: modelName}
+		entry = &PersonalCircuit{ChannelID: channelID, Model: circuitModel, Scope: personalCircuitScope(circuitModel)}
 		m.entries[key] = entry
 	} else {
 		from = entry.Status
@@ -156,7 +175,7 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	entry.LastOutcome = attempt.Outcome
 	entry.LastStatusCode = attempt.StatusCode
 	entry.LastErrorCode = attempt.ErrorCode
-	entry.RetryAt = now.Add(personalCircuitBackoff(attempt.Outcome, entry.ConsecutiveFailures)).Unix()
+	entry.RetryAt = now.Add(personalCircuitBackoff(attempt, entry.ConsecutiveFailures)).Unix()
 	if from == PersonalCircuitOpen {
 		return nil
 	}
@@ -169,21 +188,28 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	return &transition
 }
 
-func (m *personalCircuitManager) recordSuccess(channelID int, modelName string) *PersonalCircuitTransition {
+func (m *personalCircuitManager) recordSuccess(channelID int, modelName string) []PersonalCircuitTransition {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := personalCircuitKey{channelID: channelID, model: modelName}
-	entry := m.entries[key]
-	if entry == nil {
-		return nil
+	keys := []personalCircuitKey{
+		{channelID: channelID, model: personalCircuitAllModels},
+		{channelID: channelID, model: modelName},
 	}
-	delete(m.entries, key)
-	transition := PersonalCircuitTransition{
-		ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
-		From: entry.Status, To: PersonalCircuitClosed, At: m.now().Unix(),
+	transitions := make([]PersonalCircuitTransition, 0, len(keys))
+	for _, key := range keys {
+		entry := m.entries[key]
+		if entry == nil {
+			continue
+		}
+		delete(m.entries, key)
+		transition := PersonalCircuitTransition{
+			ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
+			From: entry.Status, To: PersonalCircuitClosed, At: m.now().Unix(),
+		}
+		m.appendTransitionLocked(transition)
+		transitions = append(transitions, transition)
 	}
-	m.appendTransitionLocked(transition)
-	return &transition
+	return transitions
 }
 
 func (m *personalCircuitManager) reset(channelIDs map[int]struct{}, modelName string) []PersonalCircuitTransition {
@@ -287,131 +313,46 @@ func (m *personalCircuitManager) pruneEntriesLocked() {
 
 func opensPersonalCircuit(outcome RelayAttemptOutcome) bool {
 	return outcome == RelayAttemptTransportError || outcome == RelayAttemptRateLimited ||
-		outcome == RelayAttemptUpstream5xx || outcome == RelayAttemptModelUnavailable
+		outcome == RelayAttemptUpstream5xx || outcome == RelayAttemptModelUnavailable ||
+		outcome == RelayAttemptAuthError || outcome == RelayAttemptChannelUnavailable
 }
 
-func personalCircuitBackoff(outcome RelayAttemptOutcome, failures int) time.Duration {
-	if outcome == RelayAttemptModelUnavailable {
+func personalCircuitModel(outcome RelayAttemptOutcome, modelName string) string {
+	if outcome == RelayAttemptAuthError || outcome == RelayAttemptChannelUnavailable {
+		return personalCircuitAllModels
+	}
+	return modelName
+}
+
+func personalCircuitScope(modelName string) string {
+	if modelName == personalCircuitAllModels {
+		return "channel"
+	}
+	return "model"
+}
+
+func personalCircuitBackoff(attempt RelayAttempt, failures int) time.Duration {
+	if attempt.Outcome == RelayAttemptModelUnavailable {
 		return personalCircuitModelBackoff
+	}
+	if attempt.Outcome == RelayAttemptAuthError || attempt.Outcome == RelayAttemptChannelUnavailable {
+		return personalCircuitChannelBackoff
 	}
 	backoff := personalCircuitBaseBackoff
 	for i := 1; i < failures && backoff < personalCircuitMaxBackoff; i++ {
 		backoff *= 2
 	}
 	if backoff > personalCircuitMaxBackoff {
-		return personalCircuitMaxBackoff
+		backoff = personalCircuitMaxBackoff
+	}
+	if attempt.Outcome == RelayAttemptRateLimited && attempt.RetryAfterSeconds > 0 {
+		retryAfter := time.Duration(attempt.RetryAfterSeconds) * time.Second
+		if retryAfter > personalCircuitMaxBackoff {
+			retryAfter = personalCircuitMaxBackoff
+		}
+		if retryAfter > backoff {
+			backoff = retryAfter
+		}
 	}
 	return backoff
-}
-
-func PersonalCircuitCanAttempt(channelID int, modelName string) bool {
-	return !operation_setting.SelfUseModeEnabled || personalCircuits.canAttempt(channelID, modelName)
-}
-
-func ClaimPersonalCircuit(channelID int, modelName string, force bool) bool {
-	return !operation_setting.SelfUseModeEnabled || personalCircuits.claim(channelID, modelName, force)
-}
-
-func RecordPersonalCircuitFailure(channelID int, channelName, modelName string, attempt RelayAttempt) {
-	if !operation_setting.SelfUseModeEnabled {
-		return
-	}
-	if transition := personalCircuits.recordFailure(channelID, channelName, modelName, attempt); transition != nil {
-		notifyPersonalCircuitTransition(*transition)
-	}
-}
-
-func RecordPersonalCircuitSuccess(channelID int, modelName string) {
-	if !operation_setting.SelfUseModeEnabled {
-		return
-	}
-	if transition := personalCircuits.recordSuccess(channelID, modelName); transition != nil {
-		notifyPersonalCircuitTransition(*transition)
-	}
-}
-
-func ResetPersonalCircuits(channelIDs []int) int {
-	if !operation_setting.SelfUseModeEnabled {
-		return 0
-	}
-	ids := make(map[int]struct{}, len(channelIDs))
-	for _, channelID := range channelIDs {
-		if channelID > 0 {
-			ids[channelID] = struct{}{}
-		}
-	}
-	if len(ids) == 0 {
-		return 0
-	}
-	transitions := personalCircuits.reset(ids, "")
-	for _, transition := range transitions {
-		notifyPersonalCircuitTransition(transition)
-	}
-	return len(transitions)
-}
-
-// ForgetPersonalCircuits drops cooldown state for channels whose configuration
-// changed or that no longer exist. Reconfiguring an upstream invalidates what
-// earlier failures proved, so the new configuration gets a clean attempt instead
-// of waiting out a backoff window that no longer describes reality. Unlike an
-// operator-requested reset this stays silent: the state change follows from the
-// edit the operator just made, so a recovery notification carries no news.
-func ForgetPersonalCircuits(channelIDs ...int) {
-	if !operation_setting.SelfUseModeEnabled {
-		return
-	}
-	ids := make(map[int]struct{}, len(channelIDs))
-	for _, channelID := range channelIDs {
-		if channelID > 0 {
-			ids[channelID] = struct{}{}
-		}
-	}
-	if len(ids) == 0 {
-		return
-	}
-	personalCircuits.reset(ids, "")
-}
-
-func ResetPersonalCircuit(channelID int, modelName string) bool {
-	if !operation_setting.SelfUseModeEnabled || channelID <= 0 || modelName == "" {
-		return false
-	}
-	transitions := personalCircuits.reset(map[int]struct{}{channelID: {}}, modelName)
-	for _, transition := range transitions {
-		notifyPersonalCircuitTransition(transition)
-	}
-	return len(transitions) > 0
-}
-
-func GetPersonalCircuitSnapshot() ([]PersonalCircuit, []PersonalCircuitTransition, PersonalCircuitPolicy) {
-	circuits, transitions := personalCircuits.snapshot()
-	policy := PersonalCircuitPolicy{
-		BaseBackoffSeconds:   int64(personalCircuitBaseBackoff / time.Second),
-		MaxBackoffSeconds:    int64(personalCircuitMaxBackoff / time.Second),
-		ModelBackoffSeconds:  int64(personalCircuitModelBackoff / time.Second),
-		HalfOpenLeaseSeconds: int64(personalCircuitHalfOpenLease / time.Second),
-		Volatile:             true,
-	}
-	return circuits, transitions, policy
-}
-
-func notifyPersonalCircuitTransition(transition PersonalCircuitTransition) {
-	if !personalCircuits.shouldNotify(transition) || (transition.To != PersonalCircuitOpen && transition.To != PersonalCircuitClosed) {
-		return
-	}
-	gopool.Go(func() {
-		state := "恢复"
-		if transition.To == PersonalCircuitOpen {
-			state = "临时熔断"
-		}
-		subject := fmt.Sprintf("渠道 #%d 模型 %s %s", transition.ChannelID, transition.Model, state)
-		content := fmt.Sprintf("渠道 #%d，模型 %s，状态 %s", transition.ChannelID, transition.Model, transition.To)
-		if transition.StatusCode > 0 {
-			content += fmt.Sprintf("，HTTP %d", transition.StatusCode)
-		}
-		if transition.Outcome != "" {
-			content += fmt.Sprintf("，结果 %s", transition.Outcome)
-		}
-		NotifyRootUser(fmt.Sprintf("personal_circuit_%d_%s_%s", transition.ChannelID, transition.Model, transition.To), subject, content)
-	})
 }

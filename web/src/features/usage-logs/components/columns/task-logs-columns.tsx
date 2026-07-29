@@ -125,21 +125,12 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
       header: t('User'),
       accessorFn: (row) => row.username || row.user_id,
       cell: function UserCell({ row }) {
-        const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
-          useUsageLogsContext()
+        const { sensitiveVisible } = useUsageLogsContext()
         const log = row.original
         const displayName = log.username || String(log.user_id || '?')
 
         return (
-          <button
-            type='button'
-            className='flex items-center gap-1.5 text-left'
-            onClick={(e) => {
-              e.stopPropagation()
-              setSelectedUserId(log.user_id)
-              setUserInfoDialogOpen(true)
-            }}
-          >
+          <div className='flex items-center gap-1.5 text-left'>
             <Avatar className='ring-border/60 size-6 ring-1 max-sm:hidden'>
               <AvatarFallback
                 className={cn(
@@ -156,7 +147,7 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
             <span className='text-muted-foreground truncate text-sm hover:underline'>
               {sensitiveVisible ? displayName : '••••'}
             </span>
-          </button>
+          </div>
         )
       },
     })

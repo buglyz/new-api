@@ -42,14 +42,14 @@ describe('summary cards mode and states', () => {
     await unmountSummary(rendered)
   })
 
-  test('standard mode preserves the upstream balance, runway, and wallet', async () => {
+  test('ignores legacy status and keeps the personal usage summary', async () => {
     const rendered = await renderSummaryMode(false)
     const text = rendered.container.textContent ?? ''
 
-    assert.match(text, /Credit remaining/)
-    assert.match(text, /Runway/)
-    assert.match(text, /Wallet/)
-    assert.equal(text.includes('Total tokens'), false)
+    assert.match(text, /Last 24h tokens/)
+    for (const term of ['Credit remaining', 'Runway', 'Wallet', '$']) {
+      assert.equal(text.includes(term), false, term)
+    }
     await unmountSummary(rendered)
   })
 

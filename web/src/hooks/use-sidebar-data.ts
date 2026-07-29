@@ -28,6 +28,7 @@ import {
   Radio,
   ServerCog,
   Settings,
+  Store,
   User,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -80,6 +81,11 @@ export function useSidebarData(): SidebarData {
             title: t('API Keys'),
             url: '/keys',
             icon: Key,
+          },
+          {
+            title: t('Model Square'),
+            url: '/pricing',
+            icon: Store,
           },
           {
             title: t('Usage Logs'),

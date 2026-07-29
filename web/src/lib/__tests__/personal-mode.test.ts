@@ -69,7 +69,6 @@ describe('personal mode decisions', () => {
       '/user/reset',
       '/oauth',
       '/oauth/github',
-      '/pricing/gpt-4o',
       '/rankings',
       '/about',
       '/user-agreement',
@@ -82,6 +81,11 @@ describe('personal mode decisions', () => {
         path
       )
     }
+  })
+
+  test('keeps the authenticated model square available', () => {
+    assert.equal(getPersonalModeRedirect('/pricing', true, true), null)
+    assert.equal(getPersonalModeRedirect('/pricing/gpt-4o', true, true), null)
   })
 
   test('redirects disabled console and settings routes', () => {

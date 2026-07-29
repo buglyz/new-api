@@ -26,7 +26,6 @@ import {
   ChevronUp,
   Circle,
   Copy,
-  CreditCard,
   FileText,
   KeyRound,
   ListChecks,
@@ -88,7 +87,6 @@ const SETUP_GUIDE_CODE_PATTERN = [
 
 type DashboardActionPath =
   | '/keys'
-  | '/wallet'
   | '/playground'
   | '/channels'
   | '/usage-logs'
@@ -477,8 +475,6 @@ export function OverviewDashboard() {
   >(() => getSavedSetupGuideExpanded())
 
   const requestCount = Number(user?.request_count ?? 0)
-  const remainQuota = Number(user?.quota ?? 0)
-  const usedQuota = Number(user?.used_quota ?? 0)
   const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
 
   const apiKeysQuery = useQuery({
@@ -513,17 +509,6 @@ export function OverviewDashboard() {
         icon: KeyRound,
         completed: Boolean(preferredKey),
       },
-      ...(!personalMode
-        ? [
-            {
-              title: t('Add credits'),
-              description: t('Keep enough balance before production traffic'),
-              to: '/wallet' as const,
-              icon: CreditCard,
-              completed: remainQuota > 0 || usedQuota > 0,
-            },
-          ]
-        : []),
       {
         title: t('Send a request'),
         description: t('Verify routing with Playground or your client'),
@@ -532,7 +517,7 @@ export function OverviewDashboard() {
         completed: requestCount > 0,
       },
     ],
-    [personalMode, preferredKey, remainQuota, requestCount, t, usedQuota]
+    [preferredKey, requestCount, t]
   )
 
   const quickActions = useMemo<QuickAction[]>(
@@ -559,8 +544,8 @@ export function OverviewDashboard() {
         icon: FileText,
       },
       {
-        title: t('Pricing'),
-        description: t('Review model rates before scaling traffic'),
+        title: t('Model Square'),
+        description: t('Browse available models and endpoints'),
         to: '/pricing',
         icon: BookOpen,
       },
@@ -570,9 +555,7 @@ export function OverviewDashboard() {
 
   const visibleQuickActions = useMemo(() => {
     const visible = quickActions.filter(
-      (action) =>
-        (!personalMode || action.to !== '/pricing') &&
-        (!action.adminOnly || isAdmin)
+      (action) => !action.adminOnly || isAdmin
     )
     return prioritizePersonalModeActions(visible, personalMode)
   }, [isAdmin, personalMode, quickActions])

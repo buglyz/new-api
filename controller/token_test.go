@@ -16,6 +16,8 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -467,6 +469,22 @@ func TestGetTokenMasksKeyInResponse(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), token.Key) {
 		t.Fatalf("detail response leaked raw token key: %s", recorder.Body.String())
 	}
+}
+
+func TestTokenResponseOmitsLegacyQuotaFields(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "legacy-exhausted", "exhausted-token-key")
+	require.NoError(t, db.Model(token).Updates(map[string]interface{}{
+		"status": common.TokenStatusExhausted, "remain_quota": 0, "unlimited_quota": false,
+	}).Error)
+	require.NoError(t, db.First(token, token.Id).Error)
+	masked := buildMaskedTokenResponse(token)
+	payload, err := common.Marshal(masked)
+	require.NoError(t, err)
+	assert.Equal(t, common.TokenStatusEnabled, masked.Status)
+	assert.NotContains(t, string(payload), "remain_quota")
+	assert.NotContains(t, string(payload), "used_quota")
+	assert.NotContains(t, string(payload), "unlimited_quota")
 }
 
 func TestUpdateTokenMasksKeyInResponse(t *testing.T) {

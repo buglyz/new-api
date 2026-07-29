@@ -21,6 +21,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
+		apiRouter.GET("/pricing", middleware.UserAuth(), controller.GetPricing)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.AdminAuth())
@@ -110,15 +111,6 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
 
-		usageRoute := apiRouter.Group("/usage")
-		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
-		{
-			tokenUsageRoute := usageRoute.Group("/token")
-			tokenUsageRoute.Use(middleware.TokenAuthReadOnly())
-			{
-				tokenUsageRoute.GET("/", controller.GetTokenUsage)
-			}
-		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
@@ -217,7 +209,6 @@ func SetApiRouter(router *gin.Engine) {
 			deploymentsRoute.GET("/hardware-types", controller.GetHardwareTypes)
 			deploymentsRoute.GET("/locations", controller.GetLocations)
 			deploymentsRoute.GET("/available-replicas", controller.GetAvailableReplicas)
-			deploymentsRoute.POST("/price-estimation", controller.GetPriceEstimation)
 			deploymentsRoute.GET("/check-name", controller.CheckClusterNameAvailability)
 			deploymentsRoute.POST("/", controller.CreateDeployment)
 

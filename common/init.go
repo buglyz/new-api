@@ -109,6 +109,10 @@ func InitEnv() {
 	SyncFrequency = GetEnvOrDefault("SYNC_FREQUENCY", 60)
 	BatchUpdateInterval = GetEnvOrDefault("BATCH_UPDATE_INTERVAL", 5)
 	RelayTimeout = GetEnvOrDefault("RELAY_TIMEOUT", 0)
+	RelayConnectTimeout = positiveEnv("RELAY_CONNECT_TIMEOUT", 10)
+	RelayResponseHeaderTimeout = positiveEnv("RELAY_RESPONSE_HEADER_TIMEOUT", 20)
+	RelayNonStreamTimeout = positiveEnv("RELAY_NON_STREAM_TIMEOUT", 60)
+	RelayFailoverBudget = positiveEnv("RELAY_FAILOVER_BUDGET", 90)
 	RelayIdleConnTimeout = GetEnvOrDefault("RELAY_IDLE_CONN_TIMEOUT", 90)
 	RelayMaxIdleConns = GetEnvOrDefault("RELAY_MAX_IDLE_CONNS", 500)
 	RelayMaxIdleConnsPerHost = GetEnvOrDefault("RELAY_MAX_IDLE_CONNS_PER_HOST", 100)
@@ -165,6 +169,10 @@ func initUserSessionSettings() {
 }
 
 func positiveUserSessionEnv(name string, fallback int) int {
+	return positiveEnv(name, fallback)
+}
+
+func positiveEnv(name string, fallback int) int {
 	value := GetEnvOrDefault(name, fallback)
 	if value <= 0 {
 		SysError(fmt.Sprintf("%s must be positive, using default value: %d", name, fallback))
@@ -174,7 +182,8 @@ func positiveUserSessionEnv(name string, fallback int) int {
 }
 
 func initConstantEnv() {
-	constant.StreamingTimeout = GetEnvOrDefault("STREAMING_TIMEOUT", 300)
+	constant.StreamFirstEventTimeout = positiveEnv("STREAM_FIRST_EVENT_TIMEOUT", 35)
+	constant.StreamingTimeout = positiveEnv("STREAMING_TIMEOUT", 90)
 	constant.DifyDebug = GetEnvOrDefaultBool("DIFY_DEBUG", true)
 	constant.MaxFileDownloadMB = GetEnvOrDefault("MAX_FILE_DOWNLOAD_MB", 64)
 	constant.StreamScannerMaxBufferMB = GetEnvOrDefault("STREAM_SCANNER_MAX_BUFFER_MB", 128)

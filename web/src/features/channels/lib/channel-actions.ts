@@ -20,8 +20,6 @@ import type { QueryClient } from '@tanstack/react-query'
 import i18next from 'i18next'
 import { toast } from 'sonner'
 
-import { formatCurrencyFromUSD } from '@/lib/currency'
-
 import {
   copyChannel,
   deleteChannel,
@@ -37,8 +35,6 @@ import {
   fixChannelAbilities,
   editTagChannels,
   testAllChannels,
-  updateAllChannelsBalance,
-  updateChannelBalance,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import type { ChannelTestResponse, CopyChannelParams } from '../types'
@@ -362,41 +358,6 @@ export async function handleCopyChannel(
   }
 }
 
-/**
- * Update channel balance
- */
-export async function handleUpdateChannelBalance(
-  id: number,
-  queryClient?: QueryClient,
-  onSuccess?: (balance: number) => void
-): Promise<void> {
-  try {
-    const response = await updateChannelBalance(id)
-    if (response.success && response.balance !== undefined) {
-      const balance = response.balance
-      toast.success(
-        i18next.t('Balance updated: {{balance}}', {
-          balance: formatCurrencyFromUSD(balance, {
-            digitsLarge: 2,
-            digitsSmall: 4,
-            abbreviate: false,
-          }),
-        })
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.(balance)
-    } else {
-      toast.error(response.message || i18next.t('Failed to update balance'))
-    }
-  } catch (_error: unknown) {
-    toast.error(
-      _error instanceof Error
-        ? _error.message
-        : i18next.t('Failed to update balance')
-    )
-  }
-}
-
 // ============================================================================
 // Batch Actions
 // ============================================================================
@@ -683,32 +644,5 @@ export async function handleTestAllChannels(
     }
   } catch {
     toast.error(i18next.t('Failed to test all channels'))
-  }
-}
-
-/**
- * Update balance for all enabled channels
- */
-export async function handleUpdateAllBalances(
-  queryClient?: QueryClient,
-  onSuccess?: () => void
-): Promise<void> {
-  try {
-    const response = await updateAllChannelsBalance()
-    if (response.success) {
-      toast.success(
-        i18next.t(
-          'Updating all channel balances. This may take a while. Please refresh to see results.'
-        )
-      )
-      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
-      onSuccess?.()
-    } else {
-      toast.error(
-        response.message || i18next.t('Failed to update all balances')
-      )
-    }
-  } catch {
-    toast.error(i18next.t('Failed to update all balances'))
   }
 }

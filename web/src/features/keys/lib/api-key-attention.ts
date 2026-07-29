@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { API_KEY_STATUS } from '../constants'
 import type { ApiKey } from '../types'
 
 export const API_KEY_EXPIRING_SOON_SECONDS = 7 * 24 * 60 * 60
@@ -24,16 +23,12 @@ export const API_KEY_UNUSED_SECONDS = 90 * 24 * 60 * 60
 
 export type ApiKeyAttentionReason =
   | 'expiring_soon'
-  | 'exhausted'
   | 'long_unused'
-  | 'unbounded'
   | 'no_model_limits'
 
 export const API_KEY_ATTENTION_LABELS: Record<ApiKeyAttentionReason, string> = {
   expiring_soon: 'Expires within 7 days',
-  exhausted: 'Quota exhausted',
   long_unused: 'Unused for over 90 days',
-  unbounded: 'No expiry and unlimited quota',
   no_model_limits: 'No model restrictions',
 }
 
@@ -50,19 +45,9 @@ export function getApiKeyAttentionReasons(
   ) {
     reasons.push('expiring_soon')
   }
-  if (
-    apiKey.status === API_KEY_STATUS.EXHAUSTED ||
-    (!apiKey.unlimited_quota && apiKey.remain_quota <= 0)
-  ) {
-    reasons.push('exhausted')
-  }
-
   const lastActivity = apiKey.accessed_time || apiKey.created_time
   if (lastActivity > 0 && nowSeconds - lastActivity > API_KEY_UNUSED_SECONDS) {
     reasons.push('long_unused')
-  }
-  if (apiKey.expired_time === -1 && apiKey.unlimited_quota) {
-    reasons.push('unbounded')
   }
   if (!apiKey.model_limits_enabled) {
     reasons.push('no_model_limits')

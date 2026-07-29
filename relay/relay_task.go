@@ -26,14 +26,12 @@ type TaskSubmitResult struct {
 	UpstreamTaskID string
 	TaskData       []byte
 	Platform       constant.TaskPlatform
-	Quota          int
-	//PerCallPrice   types.PriceData
 }
 
 // ResolveOriginTask 处理基于已有任务的提交（remix / continuation）：
 // 查找原始任务、从中提取模型名称、将渠道锁定到原始任务的渠道
 // （通过 info.LockedChannel，重试时复用同一渠道并轮换 key），
-// 以及提取 OtherRatios（时长、分辨率）。
+// 并确保续作请求沿用原渠道。
 // 该函数在控制器的重试循环之前调用一次，其结果通过 info 字段和上下文持久化。
 func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	// 检测 remix action
@@ -105,42 +103,12 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		info.ApiKey = key
 	}
 
-	// 提取 remix 参数（时长、分辨率 → OtherRatios）
-	if info.Action == constant.TaskActionRemix {
-		if originTask.PrivateData.BillingContext != nil {
-			// 新的 remix 逻辑：直接从原始任务的 BillingContext 中提取 OtherRatios（如果存在）
-			for s, f := range originTask.PrivateData.BillingContext.OtherRatios {
-				info.PriceData.AddOtherRatio(s, f)
-			}
-		} else {
-			// 旧的 remix 逻辑：直接从 task data 解析 seconds 和 size（如果存在）
-			var taskData map[string]interface{}
-			_ = common.Unmarshal(originTask.Data, &taskData)
-			secondsStr, _ := taskData["seconds"].(string)
-			seconds, _ := strconv.Atoi(secondsStr)
-			if seconds <= 0 {
-				seconds = 4
-			}
-			// 历史任务数据可能包含未经校验的时长，作为计费乘数前必须钳制
-			if seconds > relaycommon.MaxTaskDurationSeconds {
-				seconds = relaycommon.MaxTaskDurationSeconds
-			}
-			sizeStr, _ := taskData["size"].(string)
-			info.PriceData.AddOtherRatio("seconds", float64(seconds))
-			info.PriceData.AddOtherRatio("size", 1)
-			if sizeStr == "1792x1024" || sizeStr == "1024x1792" {
-				info.PriceData.AddOtherRatio("size", 1.666667)
-			}
-		}
-	}
-
 	return nil
 }
 
 // RelayTaskSubmit 完成 task 提交的全部流程（每次尝试调用一次）：
 // 刷新渠道元数据 → 确定 platform/adaptor → 验证请求 →
-// 估算计费(EstimateBilling) → 计算价格 → 预扣费（仅首次）→
-// 构建/发送/解析上游请求 → 提交后计费调整(AdjustBillingOnSubmit)。
+// 构建、发送并解析上游请求。自用构建不执行计价或额度结算。
 // 控制器负责 defer Refund 和成功后 Settle。
 func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitResult, *dto.TaskError) {
 	info.InitChannelMeta(c)
@@ -177,46 +145,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		info.PublicTaskID = model.GenerateTaskID()
 	}
 
-	// 4. 价格计算：基础模型价格
+	// 4. Preserve the client-visible model while sending any configured mapping upstream.
 	info.OriginModelName = modelName
-	priceData, err := helper.ModelPriceHelperPerCall(c, info)
-	if err != nil {
-		return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
-	}
-	info.PriceData = priceData
 
-	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
-	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
-	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
-		for k, v := range estimatedRatios {
-			info.PriceData.AddOtherRatio(k, v)
-		}
-	}
-
-	// 6. 将 OtherRatios 应用到基础额度（饱和转换，防止溢出成负数）
-	if !common.StringsContains(constant.TaskPricePatches, modelName) {
-		quotaWithRatios := info.PriceData.ApplyOtherRatiosToFloat(float64(info.PriceData.Quota))
-		quota, clamp := common.QuotaFromFloatChecked(quotaWithRatios)
-		info.PriceData.Quota = quota
-		noteTaskQuotaClamp(info, clamp)
-	}
-
-	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
-	if info.Billing == nil && !info.PriceData.FreeModel {
-		info.ForcePreConsume = true
-		if apiErr := service.PreConsumeBilling(c, info.PriceData.Quota, info); apiErr != nil {
-			return nil, service.TaskErrorFromAPIError(apiErr)
-		}
-	}
-
-	// 8. 构建请求体
+	// 5. 构建请求体
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
 
-	// 9. 发送请求
+	// 6. 发送请求
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
@@ -226,65 +164,17 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
 	}
 
-	// 10. 返回 OtherRatios 给下游（header 必须在 DoResponse 写 body 之前设置）
-	otherRatios := info.PriceData.OtherRatios()
-	if otherRatios == nil {
-		otherRatios = map[string]float64{}
-	}
-	ratiosJSON, _ := common.Marshal(otherRatios)
-	c.Header("X-New-Api-Other-Ratios", string(ratiosJSON))
-
-	// 11. 解析响应
+	// 7. 解析响应
 	upstreamTaskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
 	if taskErr != nil {
 		return nil, taskErr
-	}
-
-	// 11. 提交后计费调整：让适配器根据上游实际返回调整 OtherRatios
-	finalQuota := info.PriceData.Quota
-	if adjustedRatios := adaptor.AdjustBillingOnSubmit(info, taskData); len(adjustedRatios) > 0 {
-		if adjustedQuota, ok := recalcQuotaFromRatios(info, adjustedRatios); ok {
-			// 基于调整后的 ratios 重新计算 quota
-			finalQuota = adjustedQuota
-			info.PriceData.ReplaceOtherRatios(adjustedRatios)
-			info.PriceData.Quota = finalQuota
-		}
 	}
 
 	return &TaskSubmitResult{
 		UpstreamTaskID: upstreamTaskID,
 		TaskData:       taskData,
 		Platform:       platform,
-		Quota:          finalQuota,
 	}, nil
-}
-
-// recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。
-// 公式: baseQuota × ∏(ratio) — 其中 baseQuota 是不含 OtherRatios 的基础额度。
-func recalcQuotaFromRatios(info *relaycommon.RelayInfo, ratios map[string]float64) (int, bool) {
-	// 从 PriceData 获取不含 OtherRatios 的基础价格
-	baseQuota := info.PriceData.RemoveOtherRatiosFromFloat(float64(info.PriceData.Quota))
-	priceData := info.PriceData
-	if !priceData.ReplaceOtherRatios(ratios) {
-		return 0, false
-	}
-	// 应用新的 ratios
-	result := priceData.ApplyOtherRatiosToFloat(baseQuota)
-	quota, clamp := common.QuotaFromFloatChecked(result)
-	noteTaskQuotaClamp(info, clamp)
-	return quota, true
-}
-
-// noteTaskQuotaClamp records the first quota saturation event onto the task's
-// RelayInfo so LogTaskConsumption can surface it on the submit log's
-// admin_info. First non-nil clamp wins.
-func noteTaskQuotaClamp(info *relaycommon.RelayInfo, clamp *common.QuotaClamp) {
-	if clamp == nil || info == nil {
-		return
-	}
-	if info.QuotaClamp == nil {
-		info.QuotaClamp = clamp
-	}
 }
 
 var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp *dto.TaskError){

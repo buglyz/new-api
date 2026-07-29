@@ -20,6 +20,7 @@ export interface PersonalCircuit {
   channel_id: number
   channel_name?: string
   model: string
+  scope: 'channel' | 'model'
   status: 'open' | 'half_open'
   consecutive_failures: number
   opened_at: number
@@ -53,6 +54,7 @@ export interface PersonalReliabilityResponse {
       base_backoff_seconds: number
       max_backoff_seconds: number
       model_backoff_seconds: number
+      channel_backoff_seconds: number
       half_open_lease_seconds: number
       volatile: boolean
     }

@@ -42,7 +42,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { getApiKeys, searchApiKeys } from '../api'
@@ -56,7 +55,7 @@ import { useApiKeyAttentionView } from '../hooks/use-api-key-attention-view'
 import type { ApiKey } from '../types'
 import { ApiKeyAttentionBadges } from './api-key-attention-badges'
 import { ApiKeyAttentionControls } from './api-key-attention-controls'
-import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
+import { ApiKeyCell } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { useApiKeys } from './api-keys-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
@@ -137,8 +136,6 @@ function ApiKeysMobileList({
       {rows.map((row) => {
         const apiKey = row.original
         const statusConfig = API_KEY_STATUSES[apiKey.status]
-        const total = apiKey.used_quota + apiKey.remain_quota
-
         return (
           <div
             key={row.id}
@@ -176,20 +173,6 @@ function ApiKeysMobileList({
               <DataTableRowActions row={row} />
             </div>
 
-            <div className='flex items-center justify-between gap-2 text-xs'>
-              <span className='text-muted-foreground'>{t('Quota')}</span>
-              {apiKey.unlimited_quota ? (
-                <UnlimitedQuotaBadge used={apiKey.used_quota} />
-              ) : (
-                <span className='font-medium tabular-nums'>
-                  {formatQuota(apiKey.remain_quota)}
-                  <span className='text-muted-foreground font-normal'>
-                    {' / '}
-                    {formatQuota(total)}
-                  </span>
-                </span>
-              )}
-            </div>
           </div>
         )
       })}
