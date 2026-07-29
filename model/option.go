@@ -211,7 +211,19 @@ func validateOptionValue(key string, value string) error {
 	return nil
 }
 
+func normalizeSelfUseOnlyOptionValue(key string, value string) string {
+	switch key {
+	case "DemoSiteEnabled":
+		return "false"
+	case "SelfUseModeEnabled":
+		return "true"
+	default:
+		return value
+	}
+}
+
 func UpdateOption(key string, value string) error {
+	value = normalizeSelfUseOnlyOptionValue(key, value)
 	if err := validateOptionValue(key, value); err != nil {
 		return err
 	}
@@ -239,13 +251,16 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
 	}
+	normalizedValues := make(map[string]string, len(values))
 	for key, value := range values {
+		value = normalizeSelfUseOnlyOptionValue(key, value)
+		normalizedValues[key] = value
 		if err := validateOptionValue(key, value); err != nil {
 			return err
 		}
 	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		for k, v := range values {
+		for k, v := range normalizedValues {
 			option := Option{Key: k}
 			if err := tx.FirstOrCreate(&option, Option{Key: k}).Error; err != nil {
 				return err
@@ -260,7 +275,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if err != nil {
 		return err
 	}
-	for k, v := range values {
+	for k, v := range normalizedValues {
 		if err := updateOptionMap(k, v); err != nil {
 			return err
 		}
@@ -269,6 +284,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
+	value = normalizeSelfUseOnlyOptionValue(key, value)
 	if key == retiredThemeOptionKey {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)
@@ -365,9 +381,9 @@ func updateOptionMap(key string, value string) (err error) {
 		case "CheckSensitiveEnabled":
 			setting.CheckSensitiveEnabled = boolValue
 		case "DemoSiteEnabled":
-			operation_setting.DemoSiteEnabled = boolValue
+			operation_setting.DemoSiteEnabled = false
 		case "SelfUseModeEnabled":
-			operation_setting.SelfUseModeEnabled = boolValue
+			operation_setting.SelfUseModeEnabled = true
 		case "CheckSensitiveOnPromptEnabled":
 			setting.CheckSensitiveOnPromptEnabled = boolValue
 		case "ModelRequestRateLimitEnabled":

@@ -22,12 +22,12 @@ const legacyConsoleRoutes: Record<string, string> = {
   '/console': '/dashboard',
   '/console/models': '/models',
   '/console/deployment': '/models/deployments',
-  '/console/subscription': '/subscriptions',
+  '/console/subscription': '/dashboard',
   '/console/channel': '/channels',
   '/console/token': '/keys',
   '/console/playground': '/playground',
-  '/console/redemption': '/redemption-codes',
-  '/console/user': '/users',
+  '/console/redemption': '/dashboard',
+  '/console/user': '/dashboard',
   '/console/personal': '/profile',
   '/console/log': '/usage-logs',
   '/console/midjourney': '/usage-logs/drawing',
@@ -37,10 +37,10 @@ const legacyConsoleRoutes: Record<string, string> = {
 const legacySettingsTabs: Record<string, string> = {
   operation: '/system-settings/operations/behavior',
   dashboard: '/system-settings/content/dashboard',
-  chats: '/system-settings/content/chat',
-  drawing: '/system-settings/content/drawing',
-  payment: '/system-settings/billing/payment',
-  ratio: '/system-settings/billing/model-pricing',
+  chats: '/system-settings/content/dashboard',
+  drawing: '/system-settings/content/dashboard',
+  payment: '/system-settings/site/system-info',
+  ratio: '/system-settings/models/global',
   ratelimit: '/system-settings/security/rate-limit',
   models: '/system-settings/models/global',
   'model-deployment': '/system-settings/models/model-deployment',
@@ -79,7 +79,7 @@ export function resolveLegacyRoute(rawHref: string): string | null {
     return buildTargetHref('/403', source)
   }
   if (pathname === '/console/topup') {
-    return buildTargetHref('/wallet', source)
+    return buildTargetHref('/dashboard', source)
   }
   if (pathname === '/console/setting') {
     const tab = source.searchParams.get('tab') ?? ''

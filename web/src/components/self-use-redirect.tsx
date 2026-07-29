@@ -16,16 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { Navigate } from '@tanstack/react-router'
 
-import type { LegalDocumentResponse } from './types'
+import { useAuthStore } from '@/stores/auth-store'
 
-export async function getUserAgreement() {
-  const res = await api.get<LegalDocumentResponse>('/api/user-agreement')
-  return res.data
-}
+export function RedirectToSignInOrConsole() {
+  const user = useAuthStore((state) => state.auth.user)
 
-export async function getPrivacyPolicy() {
-  const res = await api.get<LegalDocumentResponse>('/api/privacy-policy')
-  return res.data
+  if (user) {
+    return <Navigate to='/dashboard' replace />
+  }
+
+  return <Navigate to='/sign-in' replace />
 }

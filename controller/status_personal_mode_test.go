@@ -85,14 +85,6 @@ func TestGetStatusPersonalModeContract(t *testing.T) {
 		return payload.Data
 	}
 
-	operation_setting.SelfUseModeEnabled = false
-	standard := requestStatus()
-	assert.Equal(t, true, standard["register_enabled"])
-	assert.Equal(t, true, standard["github_oauth"])
-	assert.Contains(t, standard, "api_info")
-	assert.Contains(t, standard, "announcements")
-	assert.Contains(t, standard, "faq")
-
 	operation_setting.SelfUseModeEnabled = true
 	personal := requestStatus()
 	for _, key := range []string{
@@ -116,8 +108,18 @@ func TestGetStatusPersonalModeContract(t *testing.T) {
 		assert.Equal(t, false, personal[key], key)
 	}
 	assert.Equal(t, true, personal["self_use_mode_enabled"])
+	assert.Equal(t, false, personal["demo_site_enabled"])
 	assert.NotContains(t, personal, "api_info")
 	assert.NotContains(t, personal, "announcements")
 	assert.NotContains(t, personal, "faq")
 	assert.NotContains(t, personal, "custom_oauth_providers")
+
+	operation_setting.SelfUseModeEnabled = false
+	locked := requestStatus()
+	assert.Equal(t, personal["self_use_mode_enabled"], locked["self_use_mode_enabled"])
+	assert.Equal(t, personal["demo_site_enabled"], locked["demo_site_enabled"])
+	assert.Equal(t, personal["register_enabled"], locked["register_enabled"])
+	assert.Equal(t, personal["github_oauth"], locked["github_oauth"])
+	assert.NotContains(t, locked, "announcements")
+	assert.NotContains(t, locked, "faq")
 }

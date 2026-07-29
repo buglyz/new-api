@@ -17,11 +17,9 @@ type Setup struct {
 }
 
 type SetupRequest struct {
-	Username           string `json:"username"`
-	Password           string `json:"password"`
-	ConfirmPassword    string `json:"confirmPassword"`
-	SelfUseModeEnabled bool   `json:"SelfUseModeEnabled"`
-	DemoSiteEnabled    bool   `json:"DemoSiteEnabled"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	ConfirmPassword string `json:"confirmPassword"`
 }
 
 func GetSetup(c *gin.Context) {
@@ -121,12 +119,11 @@ func PostSetup(c *gin.Context) {
 		}
 	}
 
-	// Set operation modes
-	operation_setting.SelfUseModeEnabled = req.SelfUseModeEnabled
-	operation_setting.DemoSiteEnabled = req.DemoSiteEnabled
+	// Personal self-use mode is the only supported mode in this trimmed fork.
+	operation_setting.SelfUseModeEnabled = true
+	operation_setting.DemoSiteEnabled = false
 
-	// Save operation modes to database for persistence
-	err = model.UpdateOption("SelfUseModeEnabled", boolToString(req.SelfUseModeEnabled))
+	err = model.UpdateOption("SelfUseModeEnabled", boolToString(true))
 	if err != nil {
 		c.JSON(200, gin.H{
 			"success": false,
@@ -135,7 +132,7 @@ func PostSetup(c *gin.Context) {
 		return
 	}
 
-	err = model.UpdateOption("DemoSiteEnabled", boolToString(req.DemoSiteEnabled))
+	err = model.UpdateOption("DemoSiteEnabled", boolToString(false))
 	if err != nil {
 		c.JSON(200, gin.H{
 			"success": false,
