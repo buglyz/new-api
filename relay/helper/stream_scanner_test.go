@@ -15,7 +15,6 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -26,9 +25,6 @@ func init() {
 	gin.SetMode(gin.TestMode)
 	if constant.StreamingTimeout == 0 {
 		constant.StreamingTimeout = 30
-	}
-	if constant.StreamFirstEventTimeout == 0 {
-		constant.StreamFirstEventTimeout = 30
 	}
 }
 
@@ -475,15 +471,14 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 	resp := &http.Response{Body: pr}
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
 
-	done := make(chan *types.NewAPIError, 1)
+	done := make(chan struct{})
 	go func() {
-		done <- StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(done)
 	}()
 
 	select {
-	case streamErr := <-done:
-		require.NotNil(t, streamErr)
-		assert.True(t, types.IsSkipRetryError(streamErr))
+	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for stream timeout")
 	}
@@ -491,52 +486,6 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 	require.NotNil(t, info.StreamStatus)
 	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
 	assert.False(t, info.StreamStatus.IsNormalEnd())
-}
-
-func TestStreamScannerHandler_FirstEventTimeoutIsRetryable(t *testing.T) {
-	oldFirstTimeout := constant.StreamFirstEventTimeout
-	constant.StreamFirstEventTimeout = 1
-	t.Cleanup(func() { constant.StreamFirstEventTimeout = oldFirstTimeout })
-
-	reader, writer := io.Pipe()
-	t.Cleanup(func() { _ = writer.Close() })
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	resp := &http.Response{Body: reader}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
-	streamErr := StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
-
-	require.NotNil(t, streamErr)
-	assert.Equal(t, types.ErrorCodeChannelResponseTimeExceeded, streamErr.GetErrorCode())
-	assert.False(t, types.IsSkipRetryError(streamErr))
-	assert.Zero(t, info.ReceivedResponseCount)
-}
-
-func TestStreamScannerHandler_HeartbeatDoesNotResetFirstEventTimeout(t *testing.T) {
-	oldFirstTimeout := constant.StreamFirstEventTimeout
-	constant.StreamFirstEventTimeout = 1
-	t.Cleanup(func() { constant.StreamFirstEventTimeout = oldFirstTimeout })
-
-	reader, writer := io.Pipe()
-	go func() {
-		defer writer.Close()
-		for i := 0; i < 5; i++ {
-			_, _ = io.WriteString(writer, ": heartbeat\n\n")
-			time.Sleep(300 * time.Millisecond)
-		}
-	}()
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	resp := &http.Response{Body: reader}
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
-	startedAt := time.Now()
-	streamErr := StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
-
-	require.NotNil(t, streamErr)
-	assert.Less(t, time.Since(startedAt), 1400*time.Millisecond)
-	assert.Zero(t, info.ReceivedResponseCount)
 }
 
 func TestStreamScannerHandler_StreamStatus_SoftErrors(t *testing.T) {

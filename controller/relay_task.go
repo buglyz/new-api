@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -63,7 +62,6 @@ func RelayTask(c *gin.Context) {
 		ModelName:   relayInfo.OriginModelName,
 		RequestPath: c.Request.URL.Path,
 		Retry:       common.GetPointer(0),
-		StartedAt:   time.Now(),
 	}
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
@@ -92,7 +90,7 @@ func RelayTask(c *gin.Context) {
 				}
 				addUsedChannel(c, channel.Id)
 				attemptIndex := service.BeginRelayAttempt(c, channel.Id, relayInfo.OriginModelName)
-				willRetry := shouldRetry(c, channelErr, common.RetryTimes-retryParam.GetRetry(), retryParam)
+				willRetry := shouldRetry(c, channelErr, common.RetryTimes-retryParam.GetRetry())
 				attempt := service.CompleteRelayAttempt(c, attemptIndex, channelErr, willRetry)
 				service.RecordPersonalCircuitFailure(channel.Id, channel.Name, relayInfo.OriginModelName, attempt)
 				processChannelError(c,
@@ -127,7 +125,7 @@ func RelayTask(c *gin.Context) {
 			break
 		}
 
-		willRetry := shouldRetryTaskRelay(c, taskErr, common.RetryTimes-retryParam.GetRetry(), retryParam)
+		willRetry := shouldRetryTaskRelay(c, taskErr, common.RetryTimes-retryParam.GetRetry())
 		if !taskErr.LocalError {
 			relayErr := types.NewOpenAIError(taskErr.Error, types.ErrorCodeBadResponseStatusCode, taskErr.StatusCode)
 			attempt := service.CompleteRelayAttempt(c, attemptIndex, relayErr, willRetry)
@@ -180,14 +178,14 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 	c.JSON(taskErr.StatusCode, taskErr)
 }
 
-func shouldRetryTaskRelay(c *gin.Context, taskErr *dto.TaskError, retryTimes int, retryParam *service.RetryParam) bool {
+func shouldRetryTaskRelay(c *gin.Context, taskErr *dto.TaskError, retryTimes int) bool {
 	if taskErr == nil {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	if retryTimes <= 0 || !retryParam.WithinFailoverBudget() {
+	if retryTimes <= 0 {
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {

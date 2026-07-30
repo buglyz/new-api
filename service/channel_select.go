@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -19,15 +18,7 @@ type RetryParam struct {
 	ModelName    string
 	RequestPath  string
 	Retry        *int
-	StartedAt    time.Time
 	resetNextTry bool
-}
-
-func (p *RetryParam) WithinFailoverBudget() bool {
-	if p == nil || p.StartedAt.IsZero() || common.RelayFailoverBudget <= 0 {
-		return true
-	}
-	return time.Since(p.StartedAt) < time.Duration(common.RelayFailoverBudget)*time.Second
 }
 
 func (p *RetryParam) GetRetry() int {
