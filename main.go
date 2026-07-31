@@ -230,6 +230,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
 	}
+	if err := service.StopSystemTaskRunner(ctx); err != nil {
+		common.SysError(fmt.Sprintf("system task runner forced to stop: %v", err))
+	}
 	// 内存中的看板数据保存入库，避免关闭导出后重启丢失最后一批数据 (issue #5679)
 	model.SaveQuotaDataCache()
 	common.SysLog("server exited")

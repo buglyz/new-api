@@ -128,6 +128,14 @@ func SetApiRouter(router *gin.Engine) {
 			systemTaskRoute.GET("/current", controller.GetCurrentSystemTask)
 			systemTaskRoute.GET("/:task_id", controller.GetSystemTask)
 		}
+		channelMonitorRoute := apiRouter.Group("/channel-monitor")
+		channelMonitorRoute.Use(middleware.RootAuth())
+		{
+			channelMonitorRoute.GET("/overview", controller.GetChannelMonitorOverview)
+			channelMonitorRoute.PUT("/config", controller.UpdateChannelMonitorConfig)
+			channelMonitorRoute.POST("/trigger", controller.TriggerChannelMonitor)
+			channelMonitorRoute.GET("/history", controller.GetChannelMonitorHistory)
+		}
 		systemInfoRoute := apiRouter.Group("/system-info")
 		systemInfoRoute.Use(middleware.RootAuth())
 		{

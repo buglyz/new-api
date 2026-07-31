@@ -127,7 +127,7 @@ func TestSystemTaskClaimPassDispatchesByType(t *testing.T) {
 	_, err := model.CreateSystemTask(handler.taskType, nil, nil)
 	require.NoError(t, err)
 
-	runSystemTaskClaimPass("runner-dispatch")
+	runSystemTaskClaimPass(context.Background(), "runner-dispatch")
 
 	select {
 	case got := <-ran:
@@ -184,7 +184,7 @@ func TestSystemTaskClaimPassDispatchesEarliestPendingByType(t *testing.T) {
 	firstB, err := model.CreateSystemTask(handlerB.taskType, nil, nil)
 	require.NoError(t, err)
 
-	runSystemTaskClaimPass("runner-dispatch")
+	runSystemTaskClaimPass(context.Background(), "runner-dispatch")
 
 	got := map[string]bool{}
 	for range 2 {
@@ -231,4 +231,19 @@ func TestEnqueueSystemTaskReportsCreatedAndExistingActive(t *testing.T) {
 	require.True(t, created)
 	require.NotNil(t, second)
 	assert.NotEqual(t, first.TaskID, second.TaskID)
+}
+
+func TestRunWithLeaseHeartbeatCancelsWithParentContext(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
+	go runWithLeaseHeartbeat(parent, &model.SystemTask{}, "runner", func(ctx context.Context) {
+		<-ctx.Done()
+		close(finished)
+	})
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("task handler did not receive runner cancellation")
+	}
 }
