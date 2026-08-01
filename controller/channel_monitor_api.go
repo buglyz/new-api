@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -12,7 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const channelMonitorOverviewWindowSeconds = 24 * 60 * 60
+const (
+	channelMonitorOverviewWindowSeconds     int64 = 24 * 60 * 60
+	channelMonitorAvailabilityBucketSeconds int64 = 60 * 60
+	channelMonitorAvailabilityBucketCount         = 24
+)
 
 type channelMonitorConfigRequest struct {
 	Enabled                  bool     `json:"enabled"`
@@ -23,11 +28,32 @@ type channelMonitorConfigRequest struct {
 	ConfirmRetryDelaySeconds int      `json:"confirm_retry_delay_seconds"`
 	FailureThreshold         int      `json:"failure_threshold"`
 	ExcludePatterns          []string `json:"exclude_patterns"`
+	ExcludeChannelIDs        []int    `json:"exclude_channel_ids"`
+}
+
+type channelMonitorChannelOption struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+type channelMonitorAvailabilityPoint struct {
+	StartAt     int64    `json:"start_at"`
+	EndAt       int64    `json:"end_at"`
+	SuccessRate *float64 `json:"success_rate"`
+	Succeeded   int64    `json:"succeeded"`
+	Samples     int64    `json:"samples"`
+}
+
+type channelMonitorAvailability struct {
+	ChannelID int                               `json:"channel_id"`
+	Points    []channelMonitorAvailabilityPoint `json:"points"`
 }
 
 func GetChannelMonitorOverview(c *gin.Context) {
 	setting := operation_setting.GetNativeMonitorSetting()
-	targets, err := model.ListChannelMonitorTargets(common.GetTimestamp() - channelMonitorOverviewWindowSeconds)
+	now := common.GetTimestamp()
+	targets, err := model.ListChannelMonitorTargets(now - channelMonitorOverviewWindowSeconds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -37,7 +63,7 @@ func GetChannelMonitorOverview(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	targets = filterChannelMonitorOverviewTargets(targets, channels, setting.ExcludePatterns)
+	targets = filterChannelMonitorOverviewTargets(targets, channels, setting.ExcludePatterns, setting.ExcludeChannelIDs)
 	if c.Query("filter") == "unhealthy" {
 		filtered := make([]model.ChannelMonitorTarget, 0, len(targets))
 		for _, target := range targets {
@@ -47,6 +73,14 @@ func GetChannelMonitorOverview(c *gin.Context) {
 		}
 		targets = filtered
 	}
+	availabilityStats, err := model.ListChannelMonitorAvailability(
+		now-channelMonitorOverviewWindowSeconds,
+		channelMonitorAvailabilityBucketSeconds,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	task, err := model.GetActiveSystemTask(model.SystemTaskTypeChannelMonitor)
 	if err != nil {
 		common.ApiError(c, err)
@@ -55,7 +89,13 @@ func GetChannelMonitorOverview(c *gin.Context) {
 	data := gin.H{
 		"settings": setting,
 		"targets":  targets,
-		"task":     nil,
+		"channels": channelMonitorChannelOptions(channels),
+		"availability": channelMonitorAvailabilityForTargets(
+			targets,
+			availabilityStats,
+			now,
+		),
+		"task": nil,
 	}
 	if task != nil {
 		data["task"] = task.ToResponse()
@@ -63,8 +103,68 @@ func GetChannelMonitorOverview(c *gin.Context) {
 	common.ApiSuccess(c, data)
 }
 
-func filterChannelMonitorOverviewTargets(targets []model.ChannelMonitorTarget, channels []*model.Channel, patterns []string) []model.ChannelMonitorTarget {
-	monitorable := collectChannelMonitorTargets(channels, patterns)
+func channelMonitorAvailabilityForTargets(targets []model.ChannelMonitorTarget, stats []model.ChannelMonitorAvailabilityStat, now int64) []channelMonitorAvailability {
+	statsByChannel := make(map[int]map[int64]model.ChannelMonitorAvailabilityStat)
+	for _, stat := range stats {
+		byBucket := statsByChannel[stat.ChannelID]
+		if byBucket == nil {
+			byBucket = make(map[int64]model.ChannelMonitorAvailabilityStat)
+			statsByChannel[stat.ChannelID] = byBucket
+		}
+		byBucket[stat.BucketStart] = stat
+	}
+
+	channelIDs := make([]int, 0, len(targets))
+	seenChannels := make(map[int]struct{}, len(targets))
+	for _, target := range targets {
+		if _, ok := seenChannels[target.ChannelID]; ok {
+			continue
+		}
+		seenChannels[target.ChannelID] = struct{}{}
+		channelIDs = append(channelIDs, target.ChannelID)
+	}
+	sort.Ints(channelIDs)
+
+	currentBucket := now - now%channelMonitorAvailabilityBucketSeconds
+	firstBucket := currentBucket - int64(channelMonitorAvailabilityBucketCount-1)*channelMonitorAvailabilityBucketSeconds
+	availability := make([]channelMonitorAvailability, 0, len(channelIDs))
+	for _, channelID := range channelIDs {
+		points := make([]channelMonitorAvailabilityPoint, 0, channelMonitorAvailabilityBucketCount)
+		byBucket := statsByChannel[channelID]
+		for index := 0; index < channelMonitorAvailabilityBucketCount; index++ {
+			startAt := firstBucket + int64(index)*channelMonitorAvailabilityBucketSeconds
+			point := channelMonitorAvailabilityPoint{
+				StartAt: startAt,
+				EndAt:   startAt + channelMonitorAvailabilityBucketSeconds,
+			}
+			if stat, ok := byBucket[startAt]; ok && stat.Total > 0 {
+				rate := float64(stat.Succeeded) / float64(stat.Total)
+				point.SuccessRate = &rate
+				point.Succeeded = stat.Succeeded
+				point.Samples = stat.Total
+			}
+			points = append(points, point)
+		}
+		availability = append(availability, channelMonitorAvailability{ChannelID: channelID, Points: points})
+	}
+	return availability
+}
+
+func channelMonitorChannelOptions(channels []*model.Channel) []channelMonitorChannelOption {
+	options := make([]channelMonitorChannelOption, 0, len(channels))
+	for _, channel := range channels {
+		if channel == nil {
+			continue
+		}
+		options = append(options, channelMonitorChannelOption{
+			ID: channel.Id, Name: channel.Name, Enabled: channel.Status == common.ChannelStatusEnabled,
+		})
+	}
+	return options
+}
+
+func filterChannelMonitorOverviewTargets(targets []model.ChannelMonitorTarget, channels []*model.Channel, patterns []string, excludedChannelIDs []int) []model.ChannelMonitorTarget {
+	monitorable := collectChannelMonitorTargets(channels, patterns, excludedChannelIDs)
 	monitorableKeys := make(map[string]struct{}, len(monitorable))
 	for _, target := range monitorable {
 		monitorableKeys[channelMonitorTargetKey(target)] = struct{}{}
@@ -162,6 +262,7 @@ func normalizeChannelMonitorConfig(request channelMonitorConfigRequest) (operati
 		ConfirmRetryDelaySeconds: request.ConfirmRetryDelaySeconds,
 		FailureThreshold:         request.FailureThreshold,
 		ExcludePatterns:          request.ExcludePatterns,
+		ExcludeChannelIDs:        request.ExcludeChannelIDs,
 	}
 	return operation_setting.NormalizeNativeMonitorSetting(setting)
 }

@@ -16,13 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
+import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Table,
   TableBody,
@@ -33,11 +36,13 @@ import {
 } from '@/components/ui/table'
 import { formatTimestampToDate } from '@/lib/format'
 
-import { getChannelMonitorHistory } from '../api'
-import type { ChannelMonitorTarget } from '../types'
+import { groupChannelMonitorTargets } from '../lib/channel-monitor-groups'
+import type { ChannelMonitorAvailability, ChannelMonitorTarget } from '../types'
+import { ChannelMonitorAvailabilityBar } from './channel-monitor-availability-bar'
 
 type ChannelMonitorTableProps = {
   targets: ChannelMonitorTarget[]
+  availability: ChannelMonitorAvailability[]
   selected: ChannelMonitorTarget | null
   onSelect: (target: ChannelMonitorTarget) => void
 }
@@ -48,106 +53,113 @@ function healthVariant(health: ChannelMonitorTarget['health']) {
   return 'secondary'
 }
 
+function formatSuccessRate(rate: number | null) {
+  return rate === null ? '-' : `${Math.round(rate * 100)}%`
+}
+
 export function ChannelMonitorTable(props: ChannelMonitorTableProps) {
   const { t } = useTranslation()
-  return (
-    <div className='overflow-x-auto border'>
-      <Table className='min-w-[980px]'>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('Channel')}</TableHead>
-            <TableHead>{t('Model')}</TableHead>
-            <TableHead>{t('Health')}</TableHead>
-            <TableHead>{t('Latency')}</TableHead>
-            <TableHead>{t('24h success rate')}</TableHead>
-            <TableHead>{t('Last checked')}</TableHead>
-            <TableHead>{t('Detail')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {props.targets.map((target) => (
-            <TableRow key={`${target.channel_id}-${target.model}`}>
-              <TableCell>{target.channel_name}</TableCell>
-              <TableCell className='max-w-56 truncate font-mono'>{target.model}</TableCell>
-              <TableCell>
-                <Badge variant={healthVariant(target.health)}>{t(target.health)}</Badge>
-              </TableCell>
-              <TableCell>{target.latency_ms}ms</TableCell>
-              <TableCell>
-                {target.samples_24h
-                  ? `${Math.round(target.success_rate_24h * 100)}%`
-                  : '-'}
-              </TableCell>
-              <TableCell>{formatTimestampToDate(target.created_at)}</TableCell>
-              <TableCell>
-                <Button type='button' size='sm' variant='outline' onClick={() => props.onSelect(target)}>
-                  {t('History')}
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {props.targets.length === 0 && (
+  const groups = groupChannelMonitorTargets(props.targets)
+  const availabilityByChannel = new Map(
+    props.availability.map((item) => [item.channel_id, item])
+  )
+
+  if (groups.length === 0) {
+    return (
+      <div className='border'>
         <p className='text-muted-foreground px-4 py-8 text-center text-sm'>
           {t('No monitor results')}
         </p>
-      )}
-    </div>
-  )
-}
-
-export function ChannelMonitorHistoryPanel({ target }: { target: ChannelMonitorTarget | null }) {
-  const { t } = useTranslation()
-  const channelID = target?.channel_id
-  const modelName = target?.model
-  const historyQuery = useQuery({
-    queryKey: ['channel-monitor-history', channelID, modelName],
-    queryFn: () => {
-      if (channelID === undefined || !modelName) {
-        return Promise.reject(new Error('monitor target is required'))
-      }
-      return getChannelMonitorHistory(channelID, modelName)
-    },
-    enabled: channelID !== undefined && Boolean(modelName),
-    retry: false,
-  })
-  if (!target) return null
-  if (historyQuery.isPending) {
-    return (
-      <section className='border px-4 py-4 sm:px-5'>
-        <Skeleton className='h-5 w-64' />
-        <div className='mt-3 grid gap-2'>
-          <Skeleton className='h-6 w-full' />
-          <Skeleton className='h-6 w-5/6' />
-        </div>
-      </section>
+      </div>
     )
   }
-  if (historyQuery.isError || !historyQuery.data?.success) {
-    return <ErrorState title={t('Failed to load monitor history')} onRetry={() => void historyQuery.refetch()} />
-  }
-  const history = historyQuery.data.data ?? []
+
   return (
-    <section className='border px-4 py-4 sm:px-5'>
-      <h2 className='text-sm font-semibold'>
-        {t('Probe history')}: {target.channel_name} / {target.model}
-      </h2>
-      <div className='mt-3 grid gap-2'>
-        {history.map((entry) => (
-          <div key={entry.id} className='flex flex-wrap items-center gap-x-3 gap-y-1 text-sm'>
-            <span className='text-muted-foreground'>
-              {formatTimestampToDate(entry.created_at)}
-            </span>
-            <Badge variant={healthVariant(entry.health)}>{t(entry.health)}</Badge>
-            <span>{entry.latency_ms}ms</span>
-            {entry.error && <span className='text-destructive break-all'>{entry.error}</span>}
-          </div>
-        ))}
-        {!historyQuery.isPending && history.length === 0 && (
-          <span className='text-muted-foreground text-sm'>{t('No monitor history')}</span>
-        )}
-      </div>
-    </section>
+    <div className='grid gap-2'>
+      {groups.map((group) => (
+        <Collapsible key={group.channel_id} className='border'>
+          <CollapsibleTrigger className='group hover:bg-muted/50 flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors sm:px-5'>
+            <div className='min-w-0 flex-1'>
+              <div className='truncate font-medium'>{group.channel_name}</div>
+              <div className='text-muted-foreground mt-1 text-xs'>
+                {t('{{count}} models', { count: group.targets.length })}
+                <span className='mx-1.5'>·</span>
+                {formatTimestampToDate(group.last_checked)}
+              </div>
+              <ChannelMonitorAvailabilityBar
+                className='mt-2 max-w-md'
+                points={
+                  availabilityByChannel.get(group.channel_id)?.points ?? []
+                }
+                overall={group.success_rate_24h}
+              />
+            </div>
+            <div className='flex shrink-0 items-center gap-3'>
+              <div className='text-right'>
+                <div className='text-sm font-semibold'>
+                  {formatSuccessRate(group.success_rate_24h)}
+                </div>
+                <div className='text-muted-foreground text-xs'>
+                  {t('24h success rate')}
+                </div>
+              </div>
+              <Badge variant={healthVariant(group.health)}>
+                {t(group.health)}
+              </Badge>
+              <ChevronDown className='text-muted-foreground size-4 shrink-0 transition-transform group-data-[panel-open]/collapsible-trigger:rotate-180' />
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className='border-t'>
+            <div className='overflow-x-auto'>
+              <Table className='min-w-[860px]'>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('Model')}</TableHead>
+                    <TableHead>{t('Health')}</TableHead>
+                    <TableHead>{t('Latency')}</TableHead>
+                    <TableHead>{t('24h success rate')}</TableHead>
+                    <TableHead>{t('Last checked')}</TableHead>
+                    <TableHead>{t('Detail')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {group.targets.map((target) => (
+                    <TableRow key={`${target.channel_id}-${target.model}`}>
+                      <TableCell className='max-w-56 truncate font-mono'>
+                        {target.model}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={healthVariant(target.health)}>
+                          {t(target.health)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{target.latency_ms}ms</TableCell>
+                      <TableCell>
+                        {formatSuccessRate(
+                          target.samples_24h ? target.success_rate_24h : null
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {formatTimestampToDate(target.created_at)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='outline'
+                          onClick={() => props.onSelect(target)}
+                        >
+                          {t('History')}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ))}
+    </div>
   )
 }

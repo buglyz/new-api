@@ -22,12 +22,13 @@ import { useForm, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
+import { MultiSelect } from '@/components/multi-select'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
-import type { ChannelMonitorSettings } from '../types'
+import type { ChannelMonitorChannel, ChannelMonitorSettings } from '../types'
+import { FormError, NumericField } from './channel-monitor-settings-fields'
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -38,20 +39,17 @@ const schema = z.object({
   confirm_retry_delay_seconds: z.coerce.number().int().min(0).max(60),
   failure_threshold: z.coerce.number().int().min(1).max(10),
   exclude_patterns: z.string(),
+  exclude_channel_ids: z.array(z.number()),
 })
 
-type FormValues = z.output<typeof schema>
+export type FormValues = z.output<typeof schema>
 
 type ChannelMonitorSettingsProps = {
   settings: ChannelMonitorSettings
+  channels: ChannelMonitorChannel[]
   disabled: boolean
   onSave: (settings: ChannelMonitorSettings) => Promise<unknown>
 }
-
-type NumericFieldName = Exclude<
-  keyof FormValues,
-  'enabled' | 'exclude_patterns'
->
 
 function toFormValues(settings: ChannelMonitorSettings): FormValues {
   return {
@@ -158,6 +156,35 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
         />
         <FormError message={form.formState.errors.exclude_patterns?.message} />
       </div>
+      <div className='grid gap-1.5'>
+        <label
+          className='text-sm font-medium'
+          htmlFor='channel-monitor-excluded-channels'
+        >
+          {t('Excluded channels')}
+        </label>
+        <MultiSelect
+          id='channel-monitor-excluded-channels'
+          options={props.channels.map((channel) => ({
+            label: channel.enabled
+              ? channel.name
+              : `${channel.name} (${t('Disabled')})`,
+            value: String(channel.id),
+          }))}
+          selected={form.watch('exclude_channel_ids').map(String)}
+          onChange={(values) =>
+            form.setValue(
+              'exclude_channel_ids',
+              values.map(Number).filter(Number.isInteger),
+              { shouldDirty: true }
+            )
+          }
+          placeholder={t('Select channels...')}
+          emptyText={t('No channels available')}
+          disabled={props.disabled || props.channels.length === 0}
+          maxVisibleChips={2}
+        />
+      </div>
       <div className='flex justify-end'>
         <Button
           type='submit'
@@ -168,39 +195,4 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
       </div>
     </form>
   )
-}
-
-type NumericFieldProps = {
-  form: ReturnType<typeof useForm<FormValues>>
-  name: NumericFieldName
-  label: string
-  disabled: boolean
-}
-
-function NumericField(props: NumericFieldProps) {
-  const error = props.form.formState.errors[props.name]?.message
-  return (
-    <div className='grid gap-1.5'>
-      <label
-        className='text-sm font-medium'
-        htmlFor={`channel-monitor-${props.name}`}
-      >
-        {props.label}
-      </label>
-      <Input
-        id={`channel-monitor-${props.name}`}
-        type='number'
-        min={0}
-        disabled={props.disabled}
-        aria-invalid={Boolean(error)}
-        {...props.form.register(props.name)}
-      />
-      <FormError message={error} />
-    </div>
-  )
-}
-
-function FormError({ message }: { message?: string }) {
-  if (!message) return null
-  return <span className='text-destructive text-xs'>{message}</span>
 }

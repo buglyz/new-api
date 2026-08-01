@@ -34,13 +34,14 @@ type NativeMonitorSetting struct {
 	ConfirmRetryDelaySeconds int      `json:"confirm_retry_delay_seconds"`
 	FailureThreshold         int      `json:"failure_threshold"`
 	ExcludePatterns          []string `json:"exclude_patterns"`
+	ExcludeChannelIDs        []int    `json:"exclude_channel_ids"`
 }
 
 var (
 	nativeMonitorSetting = NativeMonitorSetting{
 		Enabled: false, IntervalMinutes: 10, Concurrency: 3, TimeoutSeconds: 30,
 		ConfirmRetries: 1, ConfirmRetryDelaySeconds: 3, FailureThreshold: 3,
-		ExcludePatterns: []string{},
+		ExcludePatterns: []string{}, ExcludeChannelIDs: []int{},
 	}
 	nativeMonitorMu       sync.Mutex
 	nativeMonitorSnapshot atomic.Pointer[NativeMonitorSetting]
@@ -95,13 +96,14 @@ func GetNativeMonitorSetting() NativeMonitorSetting {
 
 func cloneNativeMonitorSetting(setting NativeMonitorSetting) NativeMonitorSetting {
 	setting.ExcludePatterns = append([]string{}, setting.ExcludePatterns...)
+	setting.ExcludeChannelIDs = append([]int{}, setting.ExcludeChannelIDs...)
 	return setting
 }
 
 func IsNativeMonitorSettingField(field string) bool {
 	switch field {
 	case "enabled", "interval_minutes", "concurrency", "timeout_seconds", "confirm_retries",
-		"confirm_retry_delay_seconds", "failure_threshold", "exclude_patterns":
+		"confirm_retry_delay_seconds", "failure_threshold", "exclude_patterns", "exclude_channel_ids":
 		return true
 	default:
 		return false
@@ -126,6 +128,17 @@ func ValidateNativeMonitorSettingValues(values map[string]string) error {
 			if _, err := NormalizeNativeMonitorSetting(NativeMonitorSetting{
 				IntervalMinutes: 1, Concurrency: 1, TimeoutSeconds: 1, FailureThreshold: 1,
 				ExcludePatterns: patterns,
+			}); err != nil {
+				return err
+			}
+		case "exclude_channel_ids":
+			var channelIDs []int
+			if err := common.Unmarshal([]byte(value), &channelIDs); err != nil {
+				return fmt.Errorf("exclude_channel_ids must be a JSON array")
+			}
+			if _, err := NormalizeNativeMonitorSetting(NativeMonitorSetting{
+				IntervalMinutes: 1, Concurrency: 1, TimeoutSeconds: 1, FailureThreshold: 1,
+				ExcludeChannelIDs: channelIDs,
 			}); err != nil {
 				return err
 			}
@@ -165,6 +178,22 @@ func NormalizeNativeMonitorSetting(setting NativeMonitorSetting) (NativeMonitorS
 	if len(setting.ExcludePatterns) > 100 {
 		return setting, fmt.Errorf("exclude_patterns cannot contain more than 100 entries")
 	}
+	if len(setting.ExcludeChannelIDs) > 1000 {
+		return setting, fmt.Errorf("exclude_channel_ids cannot contain more than 1000 entries")
+	}
+	channelIDs := make([]int, 0, len(setting.ExcludeChannelIDs))
+	seenChannelIDs := make(map[int]struct{}, len(setting.ExcludeChannelIDs))
+	for _, channelID := range setting.ExcludeChannelIDs {
+		if channelID < 1 {
+			return setting, fmt.Errorf("exclude_channel_ids must contain positive channel IDs")
+		}
+		if _, exists := seenChannelIDs[channelID]; exists {
+			continue
+		}
+		seenChannelIDs[channelID] = struct{}{}
+		channelIDs = append(channelIDs, channelID)
+	}
+	setting.ExcludeChannelIDs = channelIDs
 	patterns := make([]string, 0, len(setting.ExcludePatterns))
 	for _, pattern := range setting.ExcludePatterns {
 		pattern = strings.TrimSpace(pattern)

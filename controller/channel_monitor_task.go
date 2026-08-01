@@ -63,7 +63,7 @@ func runChannelMonitorTask(ctx context.Context, report func(processed, total int
 	if err != nil {
 		return channelMonitorTaskSummary{}, fmt.Errorf("list monitorable channels: %w", err)
 	}
-	targets, skipped := collectChannelMonitorTargetsWithSkipped(channels, setting.ExcludePatterns)
+	targets, skipped := collectChannelMonitorTargetsWithSkipped(channels, setting.ExcludePatterns, setting.ExcludeChannelIDs)
 	summary := channelMonitorTaskSummary{Targets: len(targets) + skipped, Skipped: skipped}
 	knownTargets := make([]model.ChannelMonitorTargetRef, 0)
 	for _, channel := range channels {

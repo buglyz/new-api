@@ -38,11 +38,9 @@ import {
   triggerChannelMonitor,
   updateChannelMonitorConfig,
 } from './api'
-import { ChannelMonitorSettingsForm } from './components/channel-monitor-settings'
-import {
-  ChannelMonitorHistoryPanel,
-  ChannelMonitorTable,
-} from './components/channel-monitor-table'
+import { ChannelMonitorHistoryPanel } from './components/channel-monitor-history-panel'
+import { ChannelMonitorSettingsDialog } from './components/channel-monitor-settings-dialog'
+import { ChannelMonitorTable } from './components/channel-monitor-table'
 import { useChannelMonitorTask } from './hooks/use-channel-monitor-task'
 import type { ChannelMonitorSettings, ChannelMonitorTarget } from './types'
 
@@ -51,6 +49,7 @@ export function ChannelMonitor() {
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState<ChannelMonitorTarget | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const monitorTask = useChannelMonitorTask()
   const overviewQuery = useQuery({
     queryKey: ['channel-monitor', filter],
@@ -66,6 +65,7 @@ export function ChannelMonitor() {
     },
     onSuccess: async () => {
       toast.success(t('Setting updated successfully'))
+      setSettingsOpen(false)
       await queryClient.invalidateQueries({ queryKey: ['channel-monitor'] })
     },
     onError: (error: Error) => {
@@ -108,11 +108,19 @@ export function ChannelMonitor() {
     )
   }
 
-  const { settings, targets, task } = overviewQuery.data.data
+  const { settings, targets, availability, task } = overviewQuery.data.data
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('Channel Monitor')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
+        <ChannelMonitorSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          settings={settings}
+          channels={overviewQuery.data.data.channels}
+          disabled={saveMutation.isPending}
+          onSave={(next) => saveMutation.mutateAsync(next)}
+        />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -150,32 +158,26 @@ export function ChannelMonitor() {
               {t('Monitor status unavailable; retrying')}
             </div>
           ) : null}
-          <div className='border'>
-            <ChannelMonitorSettingsForm
-              settings={settings}
-              disabled={saveMutation.isPending}
-              onSave={(next) => saveMutation.mutateAsync(next)}
-            />
-            <div className='px-4 py-3 sm:px-5'>
-              <ToggleGroup
-                value={[filter]}
-                onValueChange={(values) => {
-                  const next = values.find((value) => value !== filter)
-                  if (next === 'all' || next === 'unhealthy') setFilter(next)
-                }}
-                variant='outline'
-                size='sm'
-                aria-label={t('Channel Monitor')}
-              >
-                <ToggleGroupItem value='all'>{t('All')}</ToggleGroupItem>
-                <ToggleGroupItem value='unhealthy'>
-                  {t('Abnormal')}
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
+          <div className='flex justify-end'>
+            <ToggleGroup
+              value={[filter]}
+              onValueChange={(values) => {
+                const next = values.find((value) => value !== filter)
+                if (next === 'all' || next === 'unhealthy') setFilter(next)
+              }}
+              variant='outline'
+              size='sm'
+              aria-label={t('Channel Monitor')}
+            >
+              <ToggleGroupItem value='all'>{t('All')}</ToggleGroupItem>
+              <ToggleGroupItem value='unhealthy'>
+                {t('Abnormal')}
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
           <ChannelMonitorTable
             targets={targets}
+            availability={availability}
             selected={selected}
             onSelect={setSelected}
           />

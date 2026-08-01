@@ -31,16 +31,23 @@ type channelMonitorProbe struct {
 	errorText  string
 }
 
-func collectChannelMonitorTargets(channels []*model.Channel, patterns []string) []channelMonitorTarget {
-	targets, _ := collectChannelMonitorTargetsWithSkipped(channels, patterns)
+func collectChannelMonitorTargets(channels []*model.Channel, patterns []string, excludedChannelIDs []int) []channelMonitorTarget {
+	targets, _ := collectChannelMonitorTargetsWithSkipped(channels, patterns, excludedChannelIDs)
 	return targets
 }
 
-func collectChannelMonitorTargetsWithSkipped(channels []*model.Channel, patterns []string) ([]channelMonitorTarget, int) {
+func collectChannelMonitorTargetsWithSkipped(channels []*model.Channel, patterns []string, excludedChannelIDs []int) ([]channelMonitorTarget, int) {
 	targets := make([]channelMonitorTarget, 0)
 	skipped := 0
+	excluded := make(map[int]struct{}, len(excludedChannelIDs))
+	for _, channelID := range excludedChannelIDs {
+		excluded[channelID] = struct{}{}
+	}
 	for _, channel := range channels {
 		if channel == nil || channel.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if _, ok := excluded[channel.Id]; ok {
 			continue
 		}
 		seen := make(map[string]struct{})

@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -61,6 +62,13 @@ type channelMonitorStats struct {
 type ChannelMonitorTargetRef struct {
 	ChannelID int
 	Model     string
+}
+
+type ChannelMonitorAvailabilityStat struct {
+	ChannelID   int
+	BucketStart int64
+	Total       int64
+	Succeeded   int64
 }
 
 func (result *ChannelMonitorResult) BeforeCreate(_ *gorm.DB) error {
@@ -181,6 +189,25 @@ func ListChannelMonitorHistory(channelID int, modelName string, limit int) ([]Ch
 	return results, err
 }
 
+func ListChannelMonitorAvailability(since, bucketSize int64) ([]ChannelMonitorAvailabilityStat, error) {
+	if bucketSize < 1 {
+		bucketSize = 3600
+	}
+	bucketExpr := channelMonitorBucketExpr(bucketSize)
+	var stats []ChannelMonitorAvailabilityStat
+	query := DB.Model(&ChannelMonitorResult{}).
+		Select(fmt.Sprintf("channel_id, %s AS bucket_start, COUNT(*) AS total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS succeeded", bucketExpr), ChannelMonitorStatusSuccess).
+		Group(fmt.Sprintf("channel_id, %s", bucketExpr)).
+		Order("bucket_start ASC, channel_id ASC")
+	if since > 0 {
+		query = query.Where("created_at >= ?", since)
+	}
+	if err := query.Scan(&stats).Error; err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
 func DeleteStaleChannelMonitorTargets(known []ChannelMonitorTargetRef) error {
 	knownKeys := make(map[string]struct{}, len(known))
 	for _, target := range known {
@@ -212,4 +239,11 @@ func DeleteStaleChannelMonitorTargets(known []ChannelMonitorTargetRef) error {
 
 func channelMonitorTargetKey(channelID int, modelName string) string {
 	return strconv.Itoa(channelID) + "#" + strings.TrimSpace(modelName)
+}
+
+func channelMonitorBucketExpr(bucketSize int64) string {
+	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
+		return fmt.Sprintf("FLOOR(created_at / %d) * %d", bucketSize, bucketSize)
+	}
+	return fmt.Sprintf("(created_at / %d) * %d", bucketSize, bucketSize)
 }

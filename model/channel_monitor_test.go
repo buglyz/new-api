@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -83,6 +84,40 @@ func TestChannelMonitorTargetsUseSecondTimestampsForStats(t *testing.T) {
 	require.Len(t, targets, 1)
 	assert.Equal(t, int64(2), targets[0].Samples24H)
 	assert.InDelta(t, 1.0, targets[0].SuccessRate24H, 0.001)
+}
+
+func TestListChannelMonitorAvailabilityAggregatesHourlyBuckets(t *testing.T) {
+	truncateTables(t)
+	now := common.GetTimestamp()
+	bucketSize := int64(time.Hour.Seconds())
+	currentBucket := now - now%bucketSize
+
+	for _, result := range []ChannelMonitorResult{
+		{ChannelID: 4, Model: "model-a", Status: ChannelMonitorStatusSuccess, CreatedAt: now - 10},
+		{ChannelID: 4, Model: "model-a", Status: ChannelMonitorStatusFailure, CreatedAt: now - 20},
+		{ChannelID: 4, Model: "model-b", Status: ChannelMonitorStatusSuccess, CreatedAt: currentBucket - bucketSize + 10},
+		{ChannelID: 5, Model: "model-c", Status: ChannelMonitorStatusFailure, CreatedAt: now - 30},
+	} {
+		_, err := CreateChannelMonitorResult(result, 1, 10)
+		require.NoError(t, err)
+	}
+
+	stats, err := ListChannelMonitorAvailability(currentBucket-2*bucketSize, bucketSize)
+	require.NoError(t, err)
+	byKey := make(map[string]ChannelMonitorAvailabilityStat, len(stats))
+	for _, stat := range stats {
+		byKey[channelMonitorTargetKey(stat.ChannelID, strconv.FormatInt(stat.BucketStart, 10))] = stat
+	}
+
+	currentChannel := byKey[channelMonitorTargetKey(4, strconv.FormatInt(currentBucket, 10))]
+	assert.Equal(t, int64(2), currentChannel.Total)
+	assert.Equal(t, int64(1), currentChannel.Succeeded)
+	previousChannel := byKey[channelMonitorTargetKey(4, strconv.FormatInt(currentBucket-bucketSize, 10))]
+	assert.Equal(t, int64(1), previousChannel.Total)
+	assert.Equal(t, int64(1), previousChannel.Succeeded)
+	otherChannel := byKey[channelMonitorTargetKey(5, strconv.FormatInt(currentBucket, 10))]
+	assert.Equal(t, int64(1), otherChannel.Total)
+	assert.Zero(t, otherChannel.Succeeded)
 }
 
 func TestChannelMonitorPruningEnforcesLimitForRecentManualRuns(t *testing.T) {

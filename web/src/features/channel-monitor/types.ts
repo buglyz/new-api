@@ -25,7 +25,17 @@ export type ChannelMonitorSettings = {
   confirm_retry_delay_seconds: number
   failure_threshold: number
   exclude_patterns: string[]
+  exclude_channel_ids: number[]
 }
+
+export type ChannelMonitorChannel = {
+  id: number
+  name: string
+  enabled: boolean
+}
+
+export type ChannelMonitorHealth = 'healthy' | 'degraded' | 'down'
+export type ChannelMonitorStatus = 'success' | 'failure'
 
 export type ChannelMonitorTask = {
   task_id: string
@@ -39,8 +49,8 @@ export type ChannelMonitorTarget = {
   channel_name: string
   groups: string
   model: string
-  status: 'success' | 'failure'
-  health: 'healthy' | 'degraded' | 'down'
+  status: ChannelMonitorStatus
+  health: ChannelMonitorHealth
   state_changed: boolean
   attempts: number
   latency_ms: number
@@ -56,12 +66,27 @@ export type ChannelMonitorHistory = Omit<
   'success_rate_24h' | 'samples_24h'
 > & { id: number }
 
+export type ChannelMonitorAvailabilityPoint = {
+  start_at: number
+  end_at: number
+  success_rate: number | null
+  succeeded: number
+  samples: number
+}
+
+export type ChannelMonitorAvailability = {
+  channel_id: number
+  points: ChannelMonitorAvailabilityPoint[]
+}
+
 export type ChannelMonitorOverviewResponse = {
   success: boolean
   message: string
   data?: {
     settings: ChannelMonitorSettings
+    channels: ChannelMonitorChannel[]
     targets: ChannelMonitorTarget[]
+    availability: ChannelMonitorAvailability[]
     task: ChannelMonitorTask | null
   }
 }

@@ -116,7 +116,7 @@ func TestChannelMonitorSkipsExpensiveOrUnsupportedModels(t *testing.T) {
 		Status: common.ChannelStatusEnabled,
 		Models: "gpt-4o,dall-e-3,gpt-image-1,whisper-1,tts-1,omni-moderation-latest,seedance-1.0-pro",
 	}
-	targets, skipped := collectChannelMonitorTargetsWithSkipped([]*model.Channel{channel}, nil)
+	targets, skipped := collectChannelMonitorTargetsWithSkipped([]*model.Channel{channel}, nil, nil)
 
 	require.Len(t, targets, 1)
 	assert.Equal(t, 6, skipped)
@@ -131,14 +131,27 @@ func TestChannelMonitorSkipsUnsupportedChannelTypes(t *testing.T) {
 		Models: "chirp-v3-5",
 	}
 
-	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{channel}, nil))
+	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{channel}, nil, nil))
 
 	replicate := &model.Channel{
 		Type:   constant.ChannelTypeReplicate,
 		Status: common.ChannelStatusEnabled,
 		Models: "vendor/custom-generation-model",
 	}
-	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{replicate}, nil))
+	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{replicate}, nil, nil))
+}
+
+func TestChannelMonitorSkipsConfiguredChannels(t *testing.T) {
+	channels := []*model.Channel{
+		{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "model-a"},
+		{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "model-b"},
+	}
+
+	targets, skipped := collectChannelMonitorTargetsWithSkipped(channels, nil, []int{1})
+
+	require.Len(t, targets, 1)
+	assert.Equal(t, 0, skipped)
+	assert.Equal(t, 2, targets[0].channel.Id)
 }
 
 func TestChannelMonitorUsesConfiguredAdvancedCustomEndpoint(t *testing.T) {
@@ -205,9 +218,33 @@ func TestChannelMonitorOverviewHidesTargetsThatAreNoLongerMonitorable(t *testing
 		{ChannelID: 2, Model: "disabled-model"},
 	}
 
-	filtered := filterChannelMonitorOverviewTargets(targets, channels, []string{"excluded-*"})
+	filtered := filterChannelMonitorOverviewTargets(targets, channels, []string{"excluded-*"}, nil)
 	require.Len(t, filtered, 1)
 	assert.Equal(t, "gpt-4o", filtered[0].Model)
+}
+
+func TestChannelMonitorAvailabilityFillsEmptyHourlyBuckets(t *testing.T) {
+	now := common.GetTimestamp()
+	currentBucket := now - now%channelMonitorAvailabilityBucketSeconds
+	availability := channelMonitorAvailabilityForTargets(
+		[]model.ChannelMonitorTarget{{ChannelID: 4}},
+		[]model.ChannelMonitorAvailabilityStat{{
+			ChannelID:   4,
+			BucketStart: currentBucket - channelMonitorAvailabilityBucketSeconds,
+			Total:       4,
+			Succeeded:   3,
+		}},
+		now,
+	)
+
+	require.Len(t, availability, 1)
+	require.Len(t, availability[0].Points, channelMonitorAvailabilityBucketCount)
+	assert.Nil(t, availability[0].Points[0].SuccessRate)
+	point := availability[0].Points[channelMonitorAvailabilityBucketCount-2]
+	require.NotNil(t, point.SuccessRate)
+	assert.InDelta(t, 0.75, *point.SuccessRate, 0.001)
+	assert.Equal(t, int64(3), point.Succeeded)
+	assert.Equal(t, int64(4), point.Samples)
 }
 
 func TestChannelMonitorQuietRequestLimitsOutputTokens(t *testing.T) {
@@ -258,12 +295,14 @@ func TestNativeMonitorSettingPublishesConsistentSnapshots(t *testing.T) {
 	configureNativeMonitorForTest(t)
 	for i := 1; i <= 20; i++ {
 		require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(map[string]string{
-			"concurrency":      fmt.Sprintf("%d", i),
-			"exclude_patterns": fmt.Sprintf("[\"model-%d\"]", i),
+			"concurrency":         fmt.Sprintf("%d", i),
+			"exclude_patterns":    fmt.Sprintf("[\"model-%d\"]", i),
+			"exclude_channel_ids": fmt.Sprintf("[%d, %d]", i, i),
 		}))
 		snapshot := operation_setting.GetNativeMonitorSetting()
 		assert.Equal(t, i, snapshot.Concurrency)
 		assert.Equal(t, []string{fmt.Sprintf("model-%d", i)}, snapshot.ExcludePatterns)
+		assert.Equal(t, []int{i}, snapshot.ExcludeChannelIDs)
 	}
 }
 
@@ -271,7 +310,8 @@ func TestChannelMonitorConfigRejectsUnsafeValues(t *testing.T) {
 	_, err := normalizeChannelMonitorConfig(channelMonitorConfigRequest{
 		IntervalMinutes: 10, Concurrency: 1, TimeoutSeconds: 5,
 		ConfirmRetries: 0, ConfirmRetryDelaySeconds: 0, FailureThreshold: 1,
-		ExcludePatterns: []string{"["},
+		ExcludePatterns:   []string{"["},
+		ExcludeChannelIDs: []int{1},
 	})
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "invalid wildcard"))
@@ -289,7 +329,7 @@ func configureNativeMonitorForTest(t *testing.T) {
 	require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(map[string]string{
 		"enabled": "true", "interval_minutes": "10", "concurrency": "1",
 		"timeout_seconds": "5", "confirm_retries": "1", "confirm_retry_delay_seconds": "0",
-		"failure_threshold": "2", "exclude_patterns": "[]",
+		"failure_threshold": "2", "exclude_patterns": "[]", "exclude_channel_ids": "[]",
 	}))
 	require.NotNil(t, monitorConfig)
 }

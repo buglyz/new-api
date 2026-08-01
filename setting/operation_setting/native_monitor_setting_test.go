@@ -20,6 +20,8 @@ func TestNormalizeNativeMonitorSettingReturnsNonNilEmptyPatterns(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, setting.ExcludePatterns)
 	assert.Empty(t, setting.ExcludePatterns)
+	assert.NotNil(t, setting.ExcludeChannelIDs)
+	assert.Empty(t, setting.ExcludeChannelIDs)
 }
 
 func TestValidateNativeMonitorSettingValuesRejectsUnknownAndUnsafeFields(t *testing.T) {
@@ -31,5 +33,8 @@ func TestValidateNativeMonitorSettingValuesRejectsUnknownAndUnsafeFields(t *test
 	}))
 	assert.Error(t, ValidateNativeMonitorSettingValues(map[string]string{
 		"exclude_patterns": `["["]`,
+	}))
+	assert.Error(t, ValidateNativeMonitorSettingValues(map[string]string{
+		"exclude_channel_ids": `[0, 2]`,
 	}))
 }
