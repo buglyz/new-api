@@ -47,6 +47,39 @@ export function formatTokenCount(
   )
 }
 
+export function formatTokenCountInMillions(
+  value: string | number | null | undefined,
+  locales?: Intl.LocalesArgument
+): string {
+  const tokenCount =
+    typeof value === 'number'
+      ? Number.isSafeInteger(value) && value >= 0
+        ? BigInt(value)
+        : null
+      : typeof value === 'string' && /^\d+$/.test(value)
+        ? BigInt(value)
+        : null
+
+  if (tokenCount === null) return '-'
+
+  const million = 1_000_000n
+  if (tokenCount < million) {
+    return formatTokenCount(tokenCount.toString(), locales)
+  }
+
+  let wholeMillions = tokenCount / million
+  let hundredths = Math.round(Number(tokenCount % million) / 10_000)
+  if (hundredths === 100) {
+    wholeMillions += 1n
+    hundredths = 0
+  }
+
+  const fraction = hundredths
+    ? `.${hundredths.toString().padStart(2, '0').replace(/0+$/, '')}`
+    : ''
+  return `${formatTokenCount(wholeMillions.toString(), locales)}${fraction}M`
+}
+
 export function calculatePersonalUsage(
   data: QuotaDataItem[]
 ): PersonalUsageMetrics {

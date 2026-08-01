@@ -20,7 +20,7 @@ import { Activity, Flame, Layers } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
-import { formatTokenCount } from '@/features/dashboard/lib/personal-usage-summary'
+import { formatTokenCountInMillions } from '@/features/dashboard/lib/personal-usage-summary'
 import { formatNumber } from '@/lib/format'
 
 import { StatCard } from '../ui/stat-card'
@@ -45,7 +45,7 @@ export function PersonalUsageSummaryView(props: PersonalUsageSummaryViewProps) {
     {
       key: 'recentTokens',
       title: t('Last 24h tokens'),
-      value: formatTokenCount(props.last24hTokens),
+      value: formatTokenCountInMillions(props.last24hTokens),
       description: t('Tokens consumed in the last 24 hours'),
       icon: Flame,
       tone: 'accent-1' as const,
@@ -56,7 +56,7 @@ export function PersonalUsageSummaryView(props: PersonalUsageSummaryViewProps) {
     {
       key: 'totalTokens',
       title: t('Total tokens'),
-      value: formatTokenCount(props.totalTokens),
+      value: formatTokenCountInMillions(props.totalTokens),
       description: trackingDescription,
       icon: Layers,
       tone: 'accent-2' as const,

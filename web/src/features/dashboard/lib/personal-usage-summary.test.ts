@@ -23,6 +23,7 @@ import {
   buildPersonalUsageSparklines,
   calculatePersonalUsage,
   formatTokenCount,
+  formatTokenCountInMillions,
 } from './personal-usage-summary'
 
 describe('personal usage summary', () => {
@@ -63,5 +64,14 @@ describe('personal usage summary', () => {
     )
     assert.equal(formatTokenCount('0', 'en-US'), '0')
     assert.equal(formatTokenCount('invalid', 'en-US'), '-')
+  })
+
+  test('formats large token totals in millions without losing precision', () => {
+    assert.equal(formatTokenCountInMillions('1200', 'en-US'), '1,200')
+    assert.equal(formatTokenCountInMillions('1200000', 'en-US'), '1.2M')
+    assert.equal(
+      formatTokenCountInMillions('9007199254740993', 'en-US'),
+      '9,007,199,254.74M'
+    )
   })
 })

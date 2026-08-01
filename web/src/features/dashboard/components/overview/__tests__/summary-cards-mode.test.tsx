@@ -35,7 +35,7 @@ describe('summary cards mode and states', () => {
     const text = rendered.container.textContent ?? ''
 
     assert.match(text, /Last 24h tokens/)
-    assert.match(text, /9,007,199,254,740,993/)
+    assert.match(text, /9,007,199,254.74M/)
     for (const term of ['Credit remaining', 'Runway', 'Wallet', '$']) {
       assert.equal(text.includes(term), false, term)
     }
@@ -58,7 +58,7 @@ describe('summary cards mode and states', () => {
     const text = rendered.container.textContent ?? ''
 
     assert.match(text, /1,200/)
-    assert.match(text, /9,007,199,254,740,993/)
+    assert.match(text, /9,007,199,254.74M/)
     assert.match(text, /42/)
     for (const term of ['Balance', 'Runway', 'Wallet', '$']) {
       assert.equal(text.includes(term), false, term)
