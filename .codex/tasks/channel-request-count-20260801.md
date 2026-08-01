@@ -20,5 +20,10 @@
 
 ## 发布与部署
 
-- 待提交并推送 `main`。
-- 待 GitHub Docker Action 成功后更新 `/opt/newapi`，更新前备份 Compose 和 SQLite，并验证容器健康及本地/公网 `/api/status`。
+- 已提交并推送 `main`：`362cde72`。
+- GitHub Docker Action `30701870609` 成功，镜像 manifest digest 为
+  `sha256:b5bc355f98a26d32313c184409f384e6c3b5e9b5cef1e28f5db5a170ed57fc34`。
+- 已更新 `/opt/newapi`，备份为 `compose-before-request-count-20260801-213848.yaml` 和
+  `one-api-before-request-count-20260801-213848.db`。
+- 容器运行版本为 `main-362cde7`，状态 `healthy`、重启次数 0；本地/公网 `/api/status`
+  均返回成功，线上 SQLite `quick_check` 为 `ok`。
