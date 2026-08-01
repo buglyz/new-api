@@ -53,6 +53,7 @@ export const channelSchema = z.object({
   models: z.string().default(''),
   group: z.string().default('default'),
   used_quota: z.number().default(0),
+  request_count: z.number().default(0),
   model_mapping: z.string().nullish(),
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),
@@ -253,6 +254,7 @@ export type ChannelSortBy =
   | 'name'
   | 'priority'
   | 'balance'
+  | 'request_count'
   | 'response_time'
   | 'test_time'
 

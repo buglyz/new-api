@@ -69,6 +69,7 @@ import {
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
 import type { Channel } from '../types'
 import { ChannelAttentionBadges } from './channel-attention-badges'
+import { ChannelRequestCountCell } from './channel-request-count-cell'
 import { useChannels } from './channels-provider'
 import { DataTableRowActions } from './data-table-row-actions'
 import { DataTableTagRowActions } from './data-table-tag-row-actions'
@@ -860,6 +861,15 @@ export function useChannelsColumns(
         cell: ({ row }) => <WeightCell channel={row.original} />,
         size: 90,
         enableSorting: false,
+      },
+
+      // Request count column
+      {
+        accessorKey: 'request_count',
+        header: t('Request Count'),
+        meta: { mobileHidden: true },
+        cell: ({ row }) => <ChannelRequestCountCell channel={row.original} />,
+        size: 120,
       },
 
       // Response Time column

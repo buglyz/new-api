@@ -39,6 +39,7 @@ function channel(overrides: Partial<Channel> = {}): Channel {
     models: 'gpt-test',
     group: 'default',
     used_quota: 0,
+    request_count: 0,
     other: '',
     other_info: '',
     remark: '',

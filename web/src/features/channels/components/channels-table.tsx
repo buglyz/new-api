@@ -84,6 +84,7 @@ const CHANNEL_SORTABLE_COLUMNS = new Set<ChannelSortBy>([
   'name',
   'priority',
   'balance',
+  'request_count',
   'response_time',
   'test_time',
 ])

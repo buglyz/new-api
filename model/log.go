@@ -341,6 +341,7 @@ type RecordConsumeLogParams struct {
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
+	IncrementChannelRequestCount(params.ChannelId)
 	if !common.LogConsumeEnabled {
 		return
 	}

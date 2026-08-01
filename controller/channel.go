@@ -1408,7 +1408,7 @@ func GetTagModels(c *gin.Context) {
 // Optional query params:
 //
 //	suffix         - string appended to the original name (default "_复制")
-//	reset_balance  - bool, when true will reset balance & used_quota to 0 (default true)
+//	reset_balance  - bool, when true will reset balance, used_quota, and request_count to 0 (default true)
 func CopyChannel(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -1442,6 +1442,7 @@ func CopyChannel(c *gin.Context) {
 	if resetBalance {
 		clone.Balance = 0
 		clone.UsedQuota = 0
+		clone.RequestCount = 0
 	}
 
 	if err := clone.ValidateSettings(); err != nil {
