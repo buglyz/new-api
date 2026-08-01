@@ -16,31 +16,4 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { IInitOption, ISpec } from '@visactor/vchart'
-import VChartSimple from '@visactor/vchart/esm/vchart-simple'
-import { useEffect, useRef } from 'react'
-
-interface ModelChartProps {
-  spec: ISpec
-  option: Omit<IInitOption, 'autoFit' | 'dom'>
-}
-
-export function ModelChart(props: ModelChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const chart = new VChartSimple(props.spec, {
-      ...props.option,
-      autoFit: true,
-      dom: container,
-    })
-    chart.renderSync({ reuse: false })
-
-    return () => chart.release()
-  }, [props.option, props.spec])
-
-  return <div ref={containerRef} className='relative h-full w-full' />
-}
+export { SimpleVChart as ModelChart } from '@/components/charts/simple-vchart'

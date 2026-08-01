@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { VChart } from '@visactor/react-vchart'
 import type { EventParamsDefinition, IVChart } from '@visactor/vchart'
 import {
   Activity,
@@ -90,6 +89,8 @@ import { computeTimeRange } from '@/lib/time'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
+
+import { SankeyChart } from '@/components/charts/sankey-chart'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { FlowNodeFilterControl } from './flow-node-filter'
@@ -498,7 +499,7 @@ export function FlowCharts(props: FlowChartsProps) {
       ? flowError.message
       : t('Please try again later.')
   let chartContent = (
-    <VChart
+    <SankeyChart
       key={`flow-${chartKey}`}
       spec={{
         ...flowSpec,

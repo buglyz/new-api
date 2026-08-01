@@ -28,7 +28,7 @@ describe('model chart runtime', () => {
     for (const chartType of ['area', 'bar', 'pie']) {
       assert.notEqual(Factory.getChart(chartType), undefined)
     }
-    for (const chartType of ['wordCloud', 'sankey', 'funnel', 'treemap']) {
+    for (const chartType of ['wordCloud', 'funnel', 'treemap']) {
       assert.equal(Factory.getChart(chartType), undefined)
     }
   })

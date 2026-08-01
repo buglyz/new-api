@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { VChart } from '@visactor/react-vchart'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,6 +25,8 @@ import { useThemeRadiusPx } from '@/lib/theme-radius'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
+
+import { SimpleVChart } from '@/components/charts/simple-vchart'
 
 import type { LatencyTimePoint, UptimeDayPoint } from '../lib/mock-stats'
 
@@ -173,7 +174,7 @@ export function LatencyTrendChart(props: {
   return (
     <div className={cn('h-64 sm:h-72', props.className)}>
       {themeReady && spec && (
-        <VChart
+        <SimpleVChart
           key={`latency-${resolvedTheme}`}
           spec={{
             ...spec,
@@ -301,7 +302,7 @@ export function UptimeTrendChart(props: {
   return (
     <div className={cn('h-56 sm:h-64', props.className)}>
       {themeReady && spec && (
-        <VChart
+        <SimpleVChart
           key={`uptime-trend-${resolvedTheme}`}
           spec={{
             ...spec,
@@ -394,7 +395,7 @@ export function ThroughputBarChart(props: {
   return (
     <div className={cn('h-48 sm:h-56', props.className)}>
       {themeReady && spec && (
-        <VChart
+        <SimpleVChart
           key={`tput-${resolvedTheme}`}
           spec={{
             ...spec,
