@@ -87,7 +87,7 @@ func LogError(ctx context.Context, msg string) {
 }
 
 func LogDebug(ctx context.Context, msg string, args ...any) {
-	if common.DebugEnabled {
+	if common.DebugEnabled && !common.RequestLogsSuppressed(ctx) {
 		if len(args) > 0 {
 			msg = fmt.Sprintf(msg, args...)
 		}
@@ -96,6 +96,9 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 }
 
 func logHelper(ctx context.Context, level string, msg string) {
+	if common.RequestLogsSuppressed(ctx) {
+		return
+	}
 	var id any = "SYSTEM"
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
@@ -173,7 +176,7 @@ func FormatQuota(quota int) string {
 
 // LogJson 仅供测试使用 only for test
 func LogJson(ctx context.Context, msg string, obj any) {
-	if !common.DebugEnabled {
+	if !common.DebugEnabled || common.RequestLogsSuppressed(ctx) {
 		return
 	}
 	jsonStr, err := common.Marshal(obj)

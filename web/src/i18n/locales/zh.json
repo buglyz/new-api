@@ -746,6 +746,8 @@
     "Failure threshold": "失败阈值",
     "Excluded model patterns": "排除的模型模式",
     "Monitor run queued": "监控任务已加入队列",
+    "Monitor run completed": "监控任务已完成",
+    "Monitor run failed": "监控任务失败",
     "Run monitor": "运行监控",
     "Abnormal": "异常",
     "24h success rate": "24 小时成功率",

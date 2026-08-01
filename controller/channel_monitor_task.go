@@ -47,11 +47,7 @@ func (channelMonitorHandler) Run(ctx context.Context, task *model.SystemTask, ru
 		return
 	}
 	summary, err := runChannelMonitorTask(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
-	if err != nil {
-		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
-		return
-	}
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	finishSystemTaskHandlerWithContext(ctx, task, runnerID, summary, err)
 }
 
 func runChannelMonitorTask(ctx context.Context, report func(processed, total int)) (channelMonitorTaskSummary, error) {
@@ -67,11 +63,25 @@ func runChannelMonitorTask(ctx context.Context, report func(processed, total int
 	if err != nil {
 		return channelMonitorTaskSummary{}, fmt.Errorf("list monitorable channels: %w", err)
 	}
-	targets := collectChannelMonitorTargets(channels, setting.ExcludePatterns)
-	summary := channelMonitorTaskSummary{Targets: len(targets)}
+	targets, skipped := collectChannelMonitorTargetsWithSkipped(channels, setting.ExcludePatterns)
+	summary := channelMonitorTaskSummary{Targets: len(targets) + skipped, Skipped: skipped}
+	knownTargets := make([]model.ChannelMonitorTargetRef, 0)
+	for _, channel := range channels {
+		if channel == nil {
+			continue
+		}
+		for _, modelName := range channel.GetModels() {
+			if modelName = strings.TrimSpace(modelName); modelName != "" {
+				knownTargets = append(knownTargets, model.ChannelMonitorTargetRef{ChannelID: channel.Id, Model: modelName})
+			}
+		}
+	}
+	if err := model.DeleteStaleChannelMonitorTargets(knownTargets); err != nil {
+		return summary, fmt.Errorf("clean stale monitor targets: %w", err)
+	}
 	if len(targets) == 0 {
 		if report != nil {
-			report(0, 0)
+			report(summary.Skipped, summary.Targets)
 		}
 		return summary, nil
 	}
@@ -97,7 +107,7 @@ func runChannelMonitorTask(ctx context.Context, report func(processed, total int
 		pending = nextPending
 	}
 
-	processed := 0
+	processed := summary.Skipped
 	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			return summary, err
@@ -105,6 +115,10 @@ func runChannelMonitorTask(ctx context.Context, report func(processed, total int
 		probe, ok := final[channelMonitorTargetKey(target)]
 		if !ok {
 			summary.Skipped++
+			processed++
+			if report != nil {
+				report(processed, summary.Targets)
+			}
 			continue
 		}
 		status := model.ChannelMonitorStatusFailure
@@ -124,13 +138,13 @@ func runChannelMonitorTask(ctx context.Context, report func(processed, total int
 			LatencyMS:   probe.latencyMS,
 			HTTPStatus:  probe.httpStatus,
 			Error:       probe.errorText,
-		}, setting.FailureThreshold, operation_setting.NativeMonitorHistoryLimit)
+		}, setting.FailureThreshold, operation_setting.NativeMonitorRetentionLimit(setting.IntervalMinutes))
 		if err != nil {
 			return summary, fmt.Errorf("persist monitor result: %w", err)
 		}
 		processed++
 		if report != nil {
-			report(processed, len(targets))
+			report(processed, summary.Targets)
 		}
 	}
 	return summary, nil
@@ -151,5 +165,9 @@ func waitForChannelMonitorRetry(ctx context.Context, delaySeconds int) bool {
 }
 
 func channelMonitorTargetKey(target channelMonitorTarget) string {
-	return fmt.Sprintf("%d:%s", target.channel.Id, target.model)
+	return channelMonitorIdentity(target.channel.Id, target.model)
+}
+
+func channelMonitorIdentity(channelID int, modelName string) string {
+	return fmt.Sprintf("%d:%s", channelID, strings.TrimSpace(modelName))
 }

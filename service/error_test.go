@@ -150,6 +150,33 @@ func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	require.Contains(t, logBuffer.String(), body)
 }
 
+func TestRelayErrorHandlerQuietDoesNotExposeOrLogBody(t *testing.T) {
+	withDebugEnabled(t, true)
+	const secret = "upstream-secret-response"
+	var logBuffer bytes.Buffer
+
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &logBuffer
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultErrorWriter = oldWriter
+		common.LogWriterMu.Unlock()
+	})
+
+	body := "{\"error\":{\"message\":\"" + secret + "\"}}"
+	resp := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	newAPIError := RelayErrorHandlerQuiet(context.Background(), resp)
+
+	require.Equal(t, "bad response status code 502", newAPIError.Error())
+	require.NotContains(t, fmt.Sprintf("%+v", newAPIError.RelayError), secret)
+	require.NotContains(t, logBuffer.String(), secret)
+}
+
 func withDebugEnabled(t *testing.T, enabled bool) {
 	t.Helper()
 

@@ -746,6 +746,8 @@
     "Failure threshold": "失敗閾值",
     "Excluded model patterns": "排除的模型模式",
     "Monitor run queued": "監控任務已加入佇列",
+    "Monitor run completed": "監控任務已完成",
+    "Monitor run failed": "監控任務失敗",
     "Run monitor": "執行監控",
     "Abnormal": "異常",
     "24h success rate": "24 小時成功率",

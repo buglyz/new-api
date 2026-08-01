@@ -43,6 +43,7 @@ import {
   ChannelMonitorHistoryPanel,
   ChannelMonitorTable,
 } from './components/channel-monitor-table'
+import { useChannelMonitorTask } from './hooks/use-channel-monitor-task'
 import type { ChannelMonitorSettings, ChannelMonitorTarget } from './types'
 
 export function ChannelMonitor() {
@@ -50,6 +51,7 @@ export function ChannelMonitor() {
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('all')
   const [selected, setSelected] = useState<ChannelMonitorTarget | null>(null)
+  const monitorTask = useChannelMonitorTask()
   const overviewQuery = useQuery({
     queryKey: ['channel-monitor', filter],
     queryFn: () => getChannelMonitorOverview(filter),
@@ -76,7 +78,9 @@ export function ChannelMonitor() {
       if (!response.success) throw new Error(response.message)
       return response
     },
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      const task = response.data?.task
+      if (task?.task_id) monitorTask.watchTask(task.task_id)
       toast.success(t('Monitor run queued'))
       await queryClient.invalidateQueries({ queryKey: ['channel-monitor'] })
     },
@@ -91,7 +95,9 @@ export function ChannelMonitor() {
   if (!overviewQuery.data?.success || !overviewQuery.data.data) {
     return (
       <SectionPageLayout>
-        <SectionPageLayout.Title>{t('Channel Monitor')}</SectionPageLayout.Title>
+        <SectionPageLayout.Title>
+          {t('Channel Monitor')}
+        </SectionPageLayout.Title>
         <SectionPageLayout.Content>
           <ErrorState
             title={t('Failed to load channel monitor')}
@@ -126,7 +132,12 @@ export function ChannelMonitor() {
         <Button
           type='button'
           onClick={() => triggerMutation.mutate()}
-          disabled={!settings.enabled || triggerMutation.isPending || task !== null}
+          disabled={
+            !settings.enabled ||
+            triggerMutation.isPending ||
+            monitorTask.isWatchingTask ||
+            task !== null
+          }
         >
           <Play data-icon='inline-start' aria-hidden='true' />
           {t('Run monitor')}

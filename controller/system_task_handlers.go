@@ -65,11 +65,7 @@ func (channelTestHandler) Run(ctx context.Context, task *model.SystemTask, runne
 		return
 	}
 	summary, err := runChannelTestTask(ctx, payload, service.NewSystemTaskProgressReporter(task, runnerID))
-	if err != nil {
-		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
-		return
-	}
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	finishSystemTaskHandlerWithContext(ctx, task, runnerID, summary, err)
 }
 
 // modelUpdateHandler runs the scheduled upstream model update detection job.
@@ -111,7 +107,7 @@ func (modelUpdateHandler) Run(ctx context.Context, task *model.SystemTask, runne
 		return
 	}
 	summary := runChannelUpstreamModelUpdateTaskOnce(ctx, payload.Manual, !payload.Manual, service.NewSystemTaskProgressReporter(task, runnerID))
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	finishSystemTaskHandlerWithContext(ctx, task, runnerID, summary, nil)
 }
 
 // midjourneyPollHandler runs one Midjourney polling pass per scheduled run.
@@ -132,7 +128,7 @@ func (midjourneyPollHandler) NewPayload() any { return nil }
 
 func (midjourneyPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := runMidjourneyTaskUpdateOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	finishSystemTaskHandlerWithContext(ctx, task, runnerID, summary, nil)
 }
 
 // asyncTaskPollHandler runs one async-task (Suno/video) polling pass per
@@ -152,7 +148,7 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	finishSystemTaskHandlerWithContext(ctx, task, runnerID, summary, nil)
 }
 
 func finishSystemTaskHandler(task *model.SystemTask, runnerID string, status model.SystemTaskStatus, result any, runErr error) {
@@ -163,4 +159,15 @@ func finishSystemTaskHandler(task *model.SystemTask, runnerID string, status mod
 	if err := model.FinishSystemTask(task.TaskID, runnerID, status, result, errorMessage); err != nil {
 		common.SysLog(fmt.Sprintf("system task %s failed to persist result: %v", task.TaskID, err))
 	}
+}
+
+func finishSystemTaskHandlerWithContext(ctx context.Context, task *model.SystemTask, runnerID string, result any, runErr error) {
+	if runErr == nil && ctx != nil {
+		runErr = ctx.Err()
+	}
+	status := model.SystemTaskStatusSucceeded
+	if runErr != nil {
+		status = model.SystemTaskStatusFailed
+	}
+	finishSystemTaskHandler(task, runnerID, status, result, runErr)
 }

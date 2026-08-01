@@ -142,6 +142,22 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 	return
 }
 
+func RelayErrorHandlerQuiet(_ context.Context, resp *http.Response) (newApiErr *types.NewAPIError) {
+	statusCode := http.StatusInternalServerError
+	if resp != nil {
+		statusCode = resp.StatusCode
+	}
+	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, statusCode)
+	newApiErr.Err = fmt.Errorf("bad response status code %d", statusCode)
+	if resp != nil {
+		newApiErr.SetRetryAfterSeconds(parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()))
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}
+	return newApiErr
+}
+
 func parseRetryAfter(value string, now time.Time) int {
 	value = strings.TrimSpace(value)
 	if value == "" {

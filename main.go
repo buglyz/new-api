@@ -227,11 +227,21 @@ func main() {
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+	service.CancelSystemTaskRunner()
 	if err := srv.Shutdown(ctx); err != nil {
 		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
 	}
-	if err := service.StopSystemTaskRunner(ctx); err != nil {
-		common.SysError(fmt.Sprintf("system task runner forced to stop: %v", err))
+	runnerTimeout := shutdownTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		runnerTimeout = time.Until(deadline)
+	}
+	if runnerTimeout < 5*time.Second {
+		runnerTimeout = 5 * time.Second
+	}
+	runnerCtx, runnerCancel := context.WithTimeout(context.Background(), runnerTimeout)
+	defer runnerCancel()
+	if err := service.StopSystemTaskRunner(runnerCtx); err != nil {
+		common.FatalLog(fmt.Sprintf("system task runner forced to stop before database shutdown: %v", err))
 	}
 	// 内存中的看板数据保存入库，避免关闭导出后重启丢失最后一批数据 (issue #5679)
 	model.SaveQuotaDataCache()

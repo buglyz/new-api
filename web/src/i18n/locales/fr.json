@@ -746,6 +746,8 @@
     "Failure threshold": "Seuil d'échec",
     "Excluded model patterns": "Motifs de modèle exclus",
     "Monitor run queued": "Exécution de la surveillance mise en file d'attente",
+    "Monitor run completed": "Exécution de la surveillance terminée",
+    "Monitor run failed": "Échec de l’exécution de la surveillance",
     "Run monitor": "Exécuter la surveillance",
     "Abnormal": "Anormal",
     "24h success rate": "Taux de réussite sur 24 h",

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +12,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,8 +68,7 @@ func TestChannelMonitorUsesRelayMappingAndRetriesAgainstFakeUpstream(t *testing.
 
 func TestChannelMonitorStaysIdleWhenDisabled(t *testing.T) {
 	configureNativeMonitorForTest(t)
-	monitorConfig := config.GlobalConfig.Get("native_monitor_setting")
-	require.NoError(t, config.UpdateConfigFromMap(monitorConfig, map[string]string{"enabled": "false"}))
+	require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(map[string]string{"enabled": "false"}))
 
 	summary, err := runChannelMonitorTask(context.Background(), nil)
 	require.NoError(t, err)
@@ -84,6 +86,187 @@ func TestChannelMonitorSanitizesChannelCredentials(t *testing.T) {
 	assert.Contains(t, message, "[redacted]")
 }
 
+func TestChannelMonitorSanitizesStructuredCredentials(t *testing.T) {
+	channel := &model.Channel{Key: "{\"access_token\":\"access-secret\",\"refresh_token\":\"refresh-secret\"}"}
+	message := sanitizeChannelMonitorError("Bearer access-secret refresh-secret", channel)
+
+	assert.NotContains(t, message, "access-secret")
+	assert.NotContains(t, message, "refresh-secret")
+}
+
+func TestChannelMonitorSanitizesRouteAuthAndProxyCredentials(t *testing.T) {
+	setting := `{"proxy":"http://proxy-user:proxy-pass@proxy.example:8080?token=proxy-token"}`
+	channel := &model.Channel{
+		Setting:       &setting,
+		OtherSettings: `{"advanced_custom":{"routes":[{"incoming_path":"/v1/chat/completions","upstream_path":"/chat","auth":{"type":"header","name":"X-Key","value":"route-secret"}}]}}`,
+	}
+	message := sanitizeChannelMonitorError(
+		"route-secret proxy-user proxy-pass proxy.example proxy-token",
+		channel,
+	)
+
+	for _, sensitive := range []string{"route-secret", "proxy-user", "proxy-pass", "proxy.example", "proxy-token"} {
+		assert.NotContains(t, message, sensitive)
+	}
+}
+
+func TestChannelMonitorSkipsExpensiveOrUnsupportedModels(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeOpenAI,
+		Status: common.ChannelStatusEnabled,
+		Models: "gpt-4o,dall-e-3,gpt-image-1,whisper-1,tts-1,omni-moderation-latest,seedance-1.0-pro",
+	}
+	targets, skipped := collectChannelMonitorTargetsWithSkipped([]*model.Channel{channel}, nil)
+
+	require.Len(t, targets, 1)
+	assert.Equal(t, 6, skipped)
+	assert.Equal(t, "gpt-4o", targets[0].model)
+	assert.Equal(t, string(constant.EndpointTypeOpenAI), targets[0].endpointType)
+}
+
+func TestChannelMonitorSkipsUnsupportedChannelTypes(t *testing.T) {
+	channel := &model.Channel{
+		Type:   constant.ChannelTypeSunoAPI,
+		Status: common.ChannelStatusEnabled,
+		Models: "chirp-v3-5",
+	}
+
+	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{channel}, nil))
+
+	replicate := &model.Channel{
+		Type:   constant.ChannelTypeReplicate,
+		Status: common.ChannelStatusEnabled,
+		Models: "vendor/custom-generation-model",
+	}
+	assert.Empty(t, collectChannelMonitorTargets([]*model.Channel{replicate}, nil))
+}
+
+func TestChannelMonitorUsesConfiguredAdvancedCustomEndpoint(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeAdvancedCustom}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{
+			IncomingPath: "/v1/chat/completions",
+			Models:       []string{"rerank-chat-model"},
+		}}},
+	})
+
+	endpoint, ok := channelMonitorEndpointType(channel, "rerank-chat-model")
+	require.True(t, ok)
+	assert.Equal(t, string(constant.EndpointTypeOpenAI), endpoint)
+}
+
+func TestChannelMonitorUsesResponsesForCodexModels(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeNewAPI}
+
+	endpoint, ok := channelMonitorEndpointType(channel, "codex-mini")
+	require.True(t, ok)
+	assert.Equal(t, string(constant.EndpointTypeOpenAIResponse), endpoint)
+
+	_, ok = channelMonitorEndpointType(&model.Channel{Type: constant.ChannelTypeOpenRouter}, "codex-mini")
+	assert.False(t, ok)
+}
+
+func TestChannelMonitorUsesOnlyDedicatedEmbeddingAndRerankChannels(t *testing.T) {
+	embeddingEndpoint, ok := channelMonitorEndpointType(&model.Channel{Type: constant.ChannelTypeMokaAI}, "moka-model")
+	require.True(t, ok)
+	assert.Equal(t, string(constant.EndpointTypeEmbeddings), embeddingEndpoint)
+
+	rerankEndpoint, ok := channelMonitorEndpointType(&model.Channel{Type: constant.ChannelTypeJina}, "jina-rerank-v2")
+	require.True(t, ok)
+	assert.Equal(t, string(constant.EndpointTypeJinaRerank), rerankEndpoint)
+
+	_, ok = channelMonitorEndpointType(&model.Channel{Type: constant.ChannelTypeAli}, "text-embedding-v1")
+	assert.False(t, ok)
+}
+
+func TestChannelMonitorSkipsAliasesMappedToExpensiveModels(t *testing.T) {
+	mapping := `{"safe-alias":"image-alias","image-alias":"gpt-image-1"}`
+	channel := &model.Channel{Type: constant.ChannelTypeOpenAI, ModelMapping: &mapping}
+
+	_, ok := channelMonitorEndpointType(channel, "safe-alias")
+	assert.False(t, ok)
+
+	embeddingMapping := `{"safe-alias":"text-embedding-v1"}`
+	channel.ModelMapping = &embeddingMapping
+	_, ok = channelMonitorEndpointType(channel, "safe-alias")
+	assert.False(t, ok)
+}
+
+func TestChannelMonitorOverviewHidesTargetsThatAreNoLongerMonitorable(t *testing.T) {
+	channels := []*model.Channel{
+		{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "gpt-4o,excluded-model,gpt-image-1"},
+		{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusDisabled, Models: "disabled-model"},
+	}
+	targets := []model.ChannelMonitorTarget{
+		{ChannelID: 1, Model: "gpt-4o"},
+		{ChannelID: 1, Model: "excluded-model"},
+		{ChannelID: 1, Model: "gpt-image-1"},
+		{ChannelID: 1, Model: "removed-model"},
+		{ChannelID: 2, Model: "disabled-model"},
+	}
+
+	filtered := filterChannelMonitorOverviewTargets(targets, channels, []string{"excluded-*"})
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "gpt-4o", filtered[0].Model)
+}
+
+func TestChannelMonitorQuietRequestLimitsOutputTokens(t *testing.T) {
+	geminiReq, ok := buildTestRequest("gemini-2.5-pro", string(constant.EndpointTypeGemini), nil, false, true).(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.NotNil(t, geminiReq.MaxTokens)
+	assert.EqualValues(t, 16, *geminiReq.MaxTokens)
+
+	normalGeminiReq, ok := buildTestRequest("gemini-2.5-pro", string(constant.EndpointTypeGemini), nil, false, false).(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	require.NotNil(t, normalGeminiReq.MaxTokens)
+	assert.EqualValues(t, 3000, *normalGeminiReq.MaxTokens)
+
+	responsesReq, ok := buildTestRequest("codex-mini", string(constant.EndpointTypeOpenAIResponse), nil, false, true).(*dto.OpenAIResponsesRequest)
+	require.True(t, ok)
+	require.NotNil(t, responsesReq.MaxOutputTokens)
+	assert.EqualValues(t, 16, *responsesReq.MaxOutputTokens)
+
+	reasoningReq, ok := buildTestRequest("o1-mini", string(constant.EndpointTypeOpenAI), nil, false, true).(*dto.GeneralOpenAIRequest)
+	require.True(t, ok)
+	assert.Nil(t, reasoningReq.MaxTokens)
+	require.NotNil(t, reasoningReq.MaxCompletionTokens)
+	assert.EqualValues(t, 16, *reasoningReq.MaxCompletionTokens)
+}
+
+func TestFinishSystemTaskHandlerWithContextMarksCanceledRunFailed(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.SystemTask{}, &model.SystemTaskLock{}))
+
+	task, err := model.CreateSystemTask(model.SystemTaskTypeChannelMonitor, nil, nil)
+	require.NoError(t, err)
+	claimedTask, claimed, err := model.ClaimSystemTask(task.ID, task.Type, "runner-cancel", common.GetTimestamp()+60)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	finishSystemTaskHandlerWithContext(ctx, claimedTask, "runner-cancel", channelMonitorTaskSummary{}, nil)
+
+	reloaded, err := model.GetSystemTaskByTaskID(task.TaskID)
+	require.NoError(t, err)
+	require.NotNil(t, reloaded)
+	assert.Equal(t, model.SystemTaskStatusFailed, reloaded.Status)
+	assert.Contains(t, reloaded.Error, context.Canceled.Error())
+}
+
+func TestNativeMonitorSettingPublishesConsistentSnapshots(t *testing.T) {
+	configureNativeMonitorForTest(t)
+	for i := 1; i <= 20; i++ {
+		require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(map[string]string{
+			"concurrency":      fmt.Sprintf("%d", i),
+			"exclude_patterns": fmt.Sprintf("[\"model-%d\"]", i),
+		}))
+		snapshot := operation_setting.GetNativeMonitorSetting()
+		assert.Equal(t, i, snapshot.Concurrency)
+		assert.Equal(t, []string{fmt.Sprintf("model-%d", i)}, snapshot.ExcludePatterns)
+	}
+}
+
 func TestChannelMonitorConfigRejectsUnsafeValues(t *testing.T) {
 	_, err := normalizeChannelMonitorConfig(channelMonitorConfigRequest{
 		IntervalMinutes: 10, Concurrency: 1, TimeoutSeconds: 5,
@@ -97,14 +280,16 @@ func TestChannelMonitorConfigRejectsUnsafeValues(t *testing.T) {
 func configureNativeMonitorForTest(t *testing.T) {
 	t.Helper()
 	monitorConfig := config.GlobalConfig.Get("native_monitor_setting")
-	original, err := config.ConfigToMap(monitorConfig)
+	current := operation_setting.GetNativeMonitorSetting()
+	original, err := config.ConfigToMap(&current)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, config.UpdateConfigFromMap(monitorConfig, original))
+		require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(original))
 	})
-	require.NoError(t, config.UpdateConfigFromMap(monitorConfig, map[string]string{
+	require.NoError(t, operation_setting.UpdateNativeMonitorSettingFromMap(map[string]string{
 		"enabled": "true", "interval_minutes": "10", "concurrency": "1",
 		"timeout_seconds": "5", "confirm_retries": "1", "confirm_retry_delay_seconds": "0",
 		"failure_threshold": "2", "exclude_patterns": "[]",
 	}))
+	require.NotNil(t, monitorConfig)
 }

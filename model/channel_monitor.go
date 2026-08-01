@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	ChannelMonitorStatusSuccess  = "success"
-	ChannelMonitorStatusFailure  = "failure"
-	ChannelMonitorHealthHealthy  = "healthy"
-	ChannelMonitorHealthDegraded = "degraded"
-	ChannelMonitorHealthDown     = "down"
+	ChannelMonitorStatusSuccess   = "success"
+	ChannelMonitorStatusFailure   = "failure"
+	ChannelMonitorHealthHealthy   = "healthy"
+	ChannelMonitorHealthDegraded  = "degraded"
+	ChannelMonitorHealthDown      = "down"
+	channelMonitorDeleteBatchSize = 100
+	channelMonitorWindowSeconds   = 24 * 60 * 60
 )
 
 type ChannelMonitorResult struct {
@@ -57,6 +59,11 @@ type channelMonitorStats struct {
 	Succeeded int64
 }
 
+type ChannelMonitorTargetRef struct {
+	ChannelID int
+	Model     string
+}
+
 func (result *ChannelMonitorResult) BeforeCreate(_ *gorm.DB) error {
 	if result.CreatedAt == 0 {
 		result.CreatedAt = common.GetTimestamp()
@@ -97,7 +104,10 @@ func CreateChannelMonitorResult(result ChannelMonitorResult, failureThreshold, h
 			return nil
 		}
 		var staleIDs []int64
-		if err := tx.Model(&ChannelMonitorResult{}).Where("channel_id = ? AND model = ?", result.ChannelID, result.Model).Order("created_at asc, id asc").Limit(staleCount).Pluck("id", &staleIDs).Error; err != nil {
+		cutoff := common.GetTimestamp() - channelMonitorWindowSeconds
+		if err := tx.Model(&ChannelMonitorResult{}).
+			Where("channel_id = ? AND model = ? AND created_at < ?", result.ChannelID, result.Model, cutoff).
+			Order("created_at asc, id asc").Limit(staleCount).Pluck("id", &staleIDs).Error; err != nil {
 			return err
 		}
 		if len(staleIDs) > 0 {
@@ -153,7 +163,8 @@ func ListChannelMonitorTargets(since int64) ([]ChannelMonitorTarget, error) {
 	}
 	targets := make([]ChannelMonitorTarget, 0, len(latest))
 	for _, result := range latest {
-		stat := statsByTarget[channelMonitorTargetKey(result.ChannelID, result.Model)]
+		key := channelMonitorTargetKey(result.ChannelID, result.Model)
+		stat := statsByTarget[key]
 		target := ChannelMonitorTarget{ChannelID: result.ChannelID, ChannelName: result.ChannelName, Groups: result.Groups, Model: result.Model, Status: result.Status, Health: result.Health, StateChanged: result.StateChanged, Attempts: result.Attempts, LatencyMS: result.LatencyMS, HTTPStatus: result.HTTPStatus, Error: result.Error, CreatedAt: result.CreatedAt, Samples24H: stat.Total}
 		if stat.Total > 0 {
 			target.SuccessRate24H = float64(stat.Succeeded) / float64(stat.Total)
@@ -170,6 +181,35 @@ func ListChannelMonitorHistory(channelID int, modelName string, limit int) ([]Ch
 	var results []ChannelMonitorResult
 	err := DB.Where("channel_id = ? AND model = ?", channelID, modelName).Order("created_at desc, id desc").Limit(limit).Find(&results).Error
 	return results, err
+}
+
+func DeleteStaleChannelMonitorTargets(known []ChannelMonitorTargetRef) error {
+	knownKeys := make(map[string]struct{}, len(known))
+	for _, target := range known {
+		knownKeys[channelMonitorTargetKey(target.ChannelID, target.Model)] = struct{}{}
+	}
+	var stored []channelMonitorStats
+	if err := DB.Model(&ChannelMonitorResult{}).Select("channel_id, model").Group("channel_id, model").Scan(&stored).Error; err != nil {
+		return err
+	}
+	stale := make([]channelMonitorStats, 0)
+	for _, target := range stored {
+		if _, ok := knownKeys[channelMonitorTargetKey(target.ChannelID, target.Model)]; ok {
+			continue
+		}
+		stale = append(stale, target)
+	}
+	for start := 0; start < len(stale); start += channelMonitorDeleteBatchSize {
+		end := min(start+channelMonitorDeleteBatchSize, len(stale))
+		query := DB.Where("1 = 0")
+		for _, target := range stale[start:end] {
+			query = query.Or("channel_id = ? AND model = ?", target.ChannelID, target.Model)
+		}
+		if err := query.Delete(&ChannelMonitorResult{}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func channelMonitorTargetKey(channelID int, modelName string) string {

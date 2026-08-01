@@ -31,6 +31,7 @@ export type ChannelMonitorTask = {
   task_id: string
   status: 'pending' | 'running' | 'succeeded' | 'failed'
   state?: { progress?: number }
+  error?: string
 }
 
 export type ChannelMonitorTarget = {
@@ -81,4 +82,10 @@ export type ChannelMonitorTriggerResponse = {
   success: boolean
   message: string
   data?: { created: boolean; task: ChannelMonitorTask }
+}
+
+export type ChannelMonitorTaskResponse = {
+  success: boolean
+  message: string
+  data?: ChannelMonitorTask
 }

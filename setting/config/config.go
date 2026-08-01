@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
@@ -36,6 +35,16 @@ func (cm *ConfigManager) Get(name string) interface{} {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 	return cm.configs[name]
+}
+
+func (cm *ConfigManager) Update(name string, values map[string]string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	config := cm.configs[name]
+	if config == nil {
+		return nil
+	}
+	return updateConfigFromMap(config, values)
 }
 
 // LoadFromDB 从数据库加载配置
@@ -134,7 +143,7 @@ func configToMap(config interface{}) (map[string]string, error) {
 		case reflect.Ptr:
 			// 处理指针类型：如果非 nil，序列化指向的值
 			if !field.IsNil() {
-				bytes, err := json.Marshal(field.Interface())
+				bytes, err := common.Marshal(field.Interface())
 				if err != nil {
 					return nil, err
 				}
@@ -145,7 +154,7 @@ func configToMap(config interface{}) (map[string]string, error) {
 			}
 		case reflect.Map, reflect.Slice, reflect.Struct:
 			// 复杂类型使用JSON序列化
-			bytes, err := json.Marshal(field.Interface())
+			bytes, err := common.Marshal(field.Interface())
 			if err != nil {
 				return nil, err
 			}
@@ -247,22 +256,22 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 					field.Set(reflect.New(field.Type().Elem()))
 				}
 				// 反序列化到指针指向的值
-				err := json.Unmarshal([]byte(strValue), field.Interface())
+				err := common.Unmarshal([]byte(strValue), field.Interface())
 				if err != nil {
 					continue
 				}
 			}
 		case reflect.Map:
-			// json.Unmarshal merges into existing maps (keeps old keys that are
+			// common.Unmarshal merges into existing maps (keeps old keys that are
 			// absent from the new JSON). Allocate a fresh map so removed keys
 			// are properly cleared.
 			fresh := reflect.New(field.Type())
-			if err := json.Unmarshal([]byte(strValue), fresh.Interface()); err != nil {
+			if err := common.Unmarshal([]byte(strValue), fresh.Interface()); err != nil {
 				continue
 			}
 			field.Set(fresh.Elem())
 		case reflect.Slice, reflect.Struct:
-			err := json.Unmarshal([]byte(strValue), field.Addr().Interface())
+			err := common.Unmarshal([]byte(strValue), field.Addr().Interface())
 			if err != nil {
 				continue
 			}

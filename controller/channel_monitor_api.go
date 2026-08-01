@@ -27,11 +27,18 @@ type channelMonitorConfigRequest struct {
 }
 
 func GetChannelMonitorOverview(c *gin.Context) {
+	setting := operation_setting.GetNativeMonitorSetting()
 	targets, err := model.ListChannelMonitorTargets(common.GetTimestamp() - channelMonitorOverviewWindowSeconds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	channels, err := model.ListChannelMonitorChannels()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	targets = filterChannelMonitorOverviewTargets(targets, channels, setting.ExcludePatterns)
 	if c.Query("filter") == "unhealthy" {
 		filtered := make([]model.ChannelMonitorTarget, 0, len(targets))
 		for _, target := range targets {
@@ -47,7 +54,7 @@ func GetChannelMonitorOverview(c *gin.Context) {
 		return
 	}
 	data := gin.H{
-		"settings": operation_setting.GetNativeMonitorSetting(),
+		"settings": setting,
 		"targets":  targets,
 		"task":     nil,
 	}
@@ -55,6 +62,21 @@ func GetChannelMonitorOverview(c *gin.Context) {
 		data["task"] = task.ToResponse()
 	}
 	common.ApiSuccess(c, data)
+}
+
+func filterChannelMonitorOverviewTargets(targets []model.ChannelMonitorTarget, channels []*model.Channel, patterns []string) []model.ChannelMonitorTarget {
+	monitorable := collectChannelMonitorTargets(channels, patterns)
+	monitorableKeys := make(map[string]struct{}, len(monitorable))
+	for _, target := range monitorable {
+		monitorableKeys[channelMonitorTargetKey(target)] = struct{}{}
+	}
+	filtered := make([]model.ChannelMonitorTarget, 0, len(targets))
+	for _, target := range targets {
+		if _, ok := monitorableKeys[channelMonitorIdentity(target.ChannelID, target.Model)]; ok {
+			filtered = append(filtered, target)
+		}
+	}
+	return filtered
 }
 
 func UpdateChannelMonitorConfig(c *gin.Context) {
@@ -80,6 +102,9 @@ func UpdateChannelMonitorConfig(c *gin.Context) {
 	if err := model.UpdateOptionsBulk(options); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if !setting.Enabled {
+		service.CancelSystemTaskType(model.SystemTaskTypeChannelMonitor)
 	}
 	service.WakeSystemTaskRunner()
 	recordManageAudit(c, "channel_monitor.update", map[string]interface{}{"enabled": setting.Enabled})

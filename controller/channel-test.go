@@ -71,21 +71,12 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream, logDetails bool) testResult {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	tik := time.Now()
-	var unsupportedTestChannelTypes = []int{
-		constant.ChannelTypeMidjourney,
-		constant.ChannelTypeMidjourneyPlus,
-		constant.ChannelTypeSunoAPI,
-		constant.ChannelTypeKling,
-		constant.ChannelTypeJimeng,
-		constant.ChannelTypeDoubaoVideo,
-		constant.ChannelTypeVidu,
-	}
-	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
+	if !isChannelTestSupported(channel.Type) {
 		channelTypeName := constant.GetChannelTypeName(channel.Type)
 		return testResult{
 			localErr: fmt.Errorf("%s channel test is not supported", channelTypeName),
@@ -153,7 +144,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		testModel = ratio_setting.WithCompactModelSuffix(testModel)
 	}
 
-	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, requestPath, nil)
+	setChannelTestRequest(c, ctx, requestPath, !logDetails)
 
 	cache, err := model.GetUserCache(testUserID)
 	if err != nil {
@@ -231,7 +222,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	request := buildTestRequest(testModel, endpointType, channel, isStream)
+	request := buildTestRequest(testModel, endpointType, channel, isStream, !logDetails)
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
 
@@ -280,7 +271,9 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	//// 创建一个用于日志的 info 副本，移除 ApiKey
 	//logInfo := info
 	//logInfo.ApiKey = ""
-	common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
+	if logDetails {
+		common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
+	}
 
 	adaptor.Init(info)
 
@@ -422,17 +415,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		httpResp = resp.(*http.Response)
 		httpStatus = httpResp.StatusCode
 		if httpResp.StatusCode != http.StatusOK {
-			err := service.RelayErrorHandler(c.Request.Context(), httpResp, true)
-			common.SysError(fmt.Sprintf(
-				"channel test bad response: channel_id=%d name=%s type=%d model=%s endpoint_type=%s status=%d err=%v",
-				channel.Id,
-				channel.Name,
-				channel.Type,
-				testModel,
-				endpointType,
-				httpResp.StatusCode,
-				err,
-			))
+			err := channelTestBadResponseError(c, httpResp, channel, testModel, endpointType, logDetails)
 			return testResult{
 				context:     c,
 				localErr:    err,
@@ -483,20 +466,24 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		"upstream_model_name": info.UpstreamModelName,
 		"cache_tokens":        usage.PromptTokensDetails.CachedTokens,
 	}
-	model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
-		ChannelId:        channel.Id,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		ModelName:        info.OriginModelName,
-		TokenName:        "模型测试",
-		Quota:            0,
-		Content:          "模型测试",
-		UseTimeSeconds:   int(consumedTime),
-		IsStream:         info.IsStream,
-		Group:            info.UsingGroup,
-		Other:            other,
-	})
-	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	if logDetails {
+		model.RecordConsumeLog(c, testUserID, model.RecordConsumeLogParams{
+			ChannelId:        channel.Id,
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+			ModelName:        info.OriginModelName,
+			TokenName:        "模型测试",
+			Quota:            0,
+			Content:          "模型测试",
+			UseTimeSeconds:   int(consumedTime),
+			IsStream:         info.IsStream,
+			Group:            info.UsingGroup,
+			Other:            other,
+		})
+	}
+	if logDetails {
+		common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	}
 	return testResult{
 		context:     c,
 		localErr:    nil,
@@ -635,7 +622,7 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	return message
 }
 
-func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool) dto.Request {
+func buildTestRequest(model string, endpointType string, channel *model.Channel, isStream bool, quiet bool) dto.Request {
 	testResponsesInput := json.RawMessage(`[{"role":"user","content":"hi"}]`)
 
 	// 根据端点类型构建不同的测试请求
@@ -665,11 +652,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			}
 		case constant.EndpointTypeOpenAIResponse:
 			// 返回 OpenAIResponsesRequest
-			return &dto.OpenAIResponsesRequest{
-				Model:  model,
-				Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
-				Stream: lo.ToPtr(isStream),
-			}
+			return newChannelTestResponsesRequest(model, isStream, quiet)
 		case constant.EndpointTypeOpenAIResponseCompact:
 			// 返回 OpenAIResponsesCompactionRequest
 			return &dto.OpenAIResponsesCompactionRequest{
@@ -679,7 +662,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		case constant.EndpointTypeAnthropic, constant.EndpointTypeGemini, constant.EndpointTypeOpenAI:
 			// 返回 GeneralOpenAIRequest
 			maxTokens := uint(16)
-			if constant.EndpointType(endpointType) == constant.EndpointTypeGemini {
+			if constant.EndpointType(endpointType) == constant.EndpointTypeGemini && !quiet {
 				maxTokens = 3000
 			}
 			req := &dto.GeneralOpenAIRequest{
@@ -731,11 +714,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 
 	// Responses-only models (e.g. codex series)
 	if strings.Contains(strings.ToLower(model), "codex") {
-		return &dto.OpenAIResponsesRequest{
-			Model:  model,
-			Input:  json.RawMessage(`[{"role":"user","content":"hi"}]`),
-			Stream: lo.ToPtr(isStream),
-		}
+		return newChannelTestResponsesRequest(model, isStream, quiet)
 	}
 
 	// Chat/Completion 请求 - 返回 GeneralOpenAIRequest
@@ -753,17 +732,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		testRequest.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
 	}
 
-	if dto.IsOpenAIReasoningOModel(model) {
-		testRequest.MaxCompletionTokens = lo.ToPtr(uint(16))
-	} else if strings.Contains(model, "thinking") {
-		if !strings.Contains(model, "claude") {
-			testRequest.MaxTokens = lo.ToPtr(uint(50))
-		}
-	} else if strings.Contains(model, "gemini") {
-		testRequest.MaxTokens = lo.ToPtr(uint(3000))
-	} else {
-		testRequest.MaxTokens = lo.ToPtr(uint(16))
-	}
+	configureChannelTestTokenLimit(testRequest, model, quiet)
 
 	return testRequest
 }
@@ -800,7 +769,7 @@ func TestChannel(c *gin.Context) {
 	if c.Request != nil {
 		requestCtx = c.Request.Context()
 	}
-	result := testChannel(requestCtx, channel, testUserID, testModel, endpointType, isStream)
+	result := testChannel(requestCtx, channel, testUserID, testModel, endpointType, isStream, true)
 	if result.localErr != nil {
 		resp := gin.H{
 			"success": false,
@@ -867,7 +836,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		}
 		isChannelEnabled := channel.Status == common.ChannelStatusEnabled
 		tik := time.Now()
-		result := testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
+		result := testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel), true)
 		tok := time.Now()
 		milliseconds := tok.Sub(tik).Milliseconds()
 		if ctx != nil && ctx.Err() != nil {

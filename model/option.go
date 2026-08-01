@@ -187,13 +187,10 @@ func InitOptionMap() {
 }
 
 func loadOptionsFromDatabase() {
+	nativeMonitorOptionUpdateMu.Lock()
+	defer nativeMonitorOptionUpdateMu.Unlock()
 	options, _ := AllOption()
-	for _, option := range options {
-		err := updateOptionMap(option.Key, option.Value)
-		if err != nil {
-			common.SysLog("failed to update option map: " + err.Error())
-		}
-	}
+	applyOptionsFromDatabase(options)
 }
 
 func SyncOptions(frequency int) {
@@ -227,6 +224,10 @@ func UpdateOption(key string, value string) error {
 	if err := validateOptionValue(key, value); err != nil {
 		return err
 	}
+	if _, ok := nativeMonitorOptionField(key); ok {
+		nativeMonitorOptionUpdateMu.Lock()
+		defer nativeMonitorOptionUpdateMu.Unlock()
+	}
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -239,6 +240,9 @@ func UpdateOption(key string, value string) error {
 	// otherwise it will execute Update (with all fields).
 	DB.Save(&option)
 	// Update OptionMap
+	if _, ok := nativeMonitorOptionField(key); ok {
+		return updateNativeMonitorOption(key, value)
+	}
 	return updateOptionMap(key, value)
 }
 
@@ -259,6 +263,10 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
+	if containsNativeMonitorOptions(normalizedValues) {
+		nativeMonitorOptionUpdateMu.Lock()
+		defer nativeMonitorOptionUpdateMu.Unlock()
+	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		for k, v := range normalizedValues {
 			option := Option{Key: k}
@@ -275,12 +283,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if err != nil {
 		return err
 	}
-	for k, v := range normalizedValues {
-		if err := updateOptionMap(k, v); err != nil {
-			return err
-		}
-	}
-	return nil
+	return applyUpdatedOptionValues(normalizedValues)
 }
 
 func updateOptionMap(key string, value string) (err error) {
@@ -630,6 +633,9 @@ func handleConfigUpdate(key, value string) bool {
 
 	configName := parts[0]
 	configKey := parts[1]
+	if configName == "native_monitor_setting" {
+		return true
+	}
 
 	// 获取配置对象
 	cfg := config.GlobalConfig.Get(configName)

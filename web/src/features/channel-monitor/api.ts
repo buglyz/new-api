@@ -23,6 +23,7 @@ import type {
   ChannelMonitorHistoryResponse,
   ChannelMonitorOverviewResponse,
   ChannelMonitorSettings,
+  ChannelMonitorTaskResponse,
   ChannelMonitorTriggerResponse,
 } from './types'
 
@@ -51,10 +52,20 @@ export async function triggerChannelMonitor() {
   return response.data
 }
 
-export async function getChannelMonitorHistory(channelID: number, model: string) {
+export async function getChannelMonitorHistory(
+  channelID: number,
+  model: string
+) {
   const response = await api.get<ChannelMonitorHistoryResponse>(
     '/api/channel-monitor/history',
     { params: { channel_id: channelID, model, limit: 60 } }
+  )
+  return response.data
+}
+
+export async function getChannelMonitorTask(taskID: string) {
+  const response = await api.get<ChannelMonitorTaskResponse>(
+    `/api/system-task/${taskID}`
   )
   return response.data
 }

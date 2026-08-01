@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -127,7 +128,9 @@ func TestSystemTaskClaimPassDispatchesByType(t *testing.T) {
 	_, err := model.CreateSystemTask(handler.taskType, nil, nil)
 	require.NoError(t, err)
 
-	runSystemTaskClaimPass(context.Background(), "runner-dispatch")
+	var taskWG sync.WaitGroup
+	runSystemTaskClaimPass(context.Background(), "runner-dispatch", &taskWG)
+	t.Cleanup(taskWG.Wait)
 
 	select {
 	case got := <-ran:
@@ -184,7 +187,9 @@ func TestSystemTaskClaimPassDispatchesEarliestPendingByType(t *testing.T) {
 	firstB, err := model.CreateSystemTask(handlerB.taskType, nil, nil)
 	require.NoError(t, err)
 
-	runSystemTaskClaimPass(context.Background(), "runner-dispatch")
+	var taskWG sync.WaitGroup
+	runSystemTaskClaimPass(context.Background(), "runner-dispatch", &taskWG)
+	t.Cleanup(taskWG.Wait)
 
 	got := map[string]bool{}
 	for range 2 {
@@ -246,4 +251,21 @@ func TestRunWithLeaseHeartbeatCancelsWithParentContext(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("task handler did not receive runner cancellation")
 	}
+}
+
+func TestCancelSystemTaskTypeCancelsOnlyMatchingRun(t *testing.T) {
+	ctxA, cancelA := registerSystemTaskRun("type-a", "task-a", context.Background())
+	defer unregisterSystemTaskRun("type-a", "task-a")
+	defer cancelA()
+	ctxA2, cancelA2 := registerSystemTaskRun("type-a", "task-a-2", context.Background())
+	defer unregisterSystemTaskRun("type-a", "task-a-2")
+	defer cancelA2()
+	ctxB, cancelB := registerSystemTaskRun("type-b", "task-b", context.Background())
+	defer unregisterSystemTaskRun("type-b", "task-b")
+	defer cancelB()
+
+	CancelSystemTaskType("type-a")
+	assert.ErrorIs(t, ctxA.Err(), context.Canceled)
+	assert.ErrorIs(t, ctxA2.Err(), context.Canceled)
+	assert.NoError(t, ctxB.Err())
 }

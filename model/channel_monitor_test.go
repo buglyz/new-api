@@ -84,3 +84,37 @@ func TestChannelMonitorTargetsUseSecondTimestampsForStats(t *testing.T) {
 	assert.Equal(t, int64(2), targets[0].Samples24H)
 	assert.InDelta(t, 1.0, targets[0].SuccessRate24H, 0.001)
 }
+
+func TestChannelMonitorPruningPreservesAllRecentManualRuns(t *testing.T) {
+	truncateTables(t)
+	now := common.GetTimestamp()
+	for index := range 4 {
+		_, err := CreateChannelMonitorResult(ChannelMonitorResult{
+			ChannelID: 3, ChannelName: "manual", Model: "manual-model",
+			Status: ChannelMonitorStatusSuccess, CreatedAt: now - int64(index),
+		}, 1, 3)
+		require.NoError(t, err)
+	}
+
+	history, err := ListChannelMonitorHistory(3, "manual-model", 10)
+	require.NoError(t, err)
+	assert.Len(t, history, 4)
+}
+
+func TestDeleteStaleChannelMonitorTargetsRemovesOnlyUnknownTargets(t *testing.T) {
+	truncateTables(t)
+	for _, target := range []ChannelMonitorResult{
+		{ChannelID: 10, ChannelName: "known", Model: "model-a", Status: ChannelMonitorStatusSuccess},
+		{ChannelID: 11, ChannelName: "removed", Model: "model-b", Status: ChannelMonitorStatusFailure},
+	} {
+		_, err := CreateChannelMonitorResult(target, 1, 10)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, DeleteStaleChannelMonitorTargets([]ChannelMonitorTargetRef{{ChannelID: 10, Model: "model-a"}}))
+	targets, err := ListChannelMonitorTargets(0)
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, 10, targets[0].ChannelID)
+	assert.Equal(t, "model-a", targets[0].Model)
+}

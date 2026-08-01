@@ -116,7 +116,7 @@ func EnqueueSystemTask(taskType string, payload any) (*model.SystemTask, bool, e
 // runSystemTaskClaimPass tries to claim one pending task per registered type
 // and dispatches each claimed task in its own goroutine so a long-running
 // handler (e.g. channel test) never blocks another type (e.g. log cleanup).
-func runSystemTaskClaimPass(ctx context.Context, runnerID string) {
+func runSystemTaskClaimPass(ctx context.Context, runnerID string, taskWG *sync.WaitGroup) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -148,10 +148,13 @@ func runSystemTaskClaimPass(ctx context.Context, runnerID string) {
 		}
 		dispatchHandler := handler
 		dispatchTask := claimedTask
-		systemTaskRunnerWG.Add(1)
+		taskCtx, taskCancel := registerSystemTaskRun(handler.Type(), claimedTask.TaskID, ctx)
+		taskWG.Add(1)
 		gopool.Go(func() {
-			defer systemTaskRunnerWG.Done()
-			runWithLeaseHeartbeat(ctx, dispatchTask, runnerID, func(ctx context.Context) {
+			defer taskWG.Done()
+			defer taskCancel()
+			defer unregisterSystemTaskRun(dispatchHandler.Type(), dispatchTask.TaskID)
+			runWithLeaseHeartbeat(taskCtx, dispatchTask, runnerID, func(ctx context.Context) {
 				dispatchHandler.Run(ctx, dispatchTask, runnerID)
 			})
 		})

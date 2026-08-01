@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { describe, expect, test } from 'bun:test'
+import { describe, test } from 'bun:test'
+import assert from 'node:assert/strict'
+
 import { Factory } from '@visactor/vchart/esm/vchart-simple'
 
 import '../model-chart-runtime'
@@ -24,10 +26,10 @@ import '../model-chart-runtime'
 describe('model chart runtime', () => {
   test('registers only the chart families used by call analytics', () => {
     for (const chartType of ['area', 'bar', 'pie']) {
-      expect(Factory.getChart(chartType)).toBeDefined()
+      assert.notEqual(Factory.getChart(chartType), undefined)
     }
     for (const chartType of ['wordCloud', 'sankey', 'funnel', 'treemap']) {
-      expect(Factory.getChart(chartType)).toBeUndefined()
+      assert.equal(Factory.getChart(chartType), undefined)
     }
   })
 })

@@ -746,6 +746,8 @@
     "Failure threshold": "Ngưỡng lỗi",
     "Excluded model patterns": "Mẫu mô hình bị loại trừ",
     "Monitor run queued": "Lần chạy giám sát đã được xếp hàng",
+    "Monitor run completed": "Lần chạy giám sát đã hoàn tất",
+    "Monitor run failed": "Lần chạy giám sát thất bại",
     "Run monitor": "Chạy giám sát",
     "Abnormal": "Bất thường",
     "24h success rate": "Tỷ lệ thành công trong 24 giờ",

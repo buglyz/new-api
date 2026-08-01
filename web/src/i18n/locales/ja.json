@@ -746,6 +746,8 @@
     "Failure threshold": "失敗しきい値",
     "Excluded model patterns": "除外するモデルパターン",
     "Monitor run queued": "監視実行をキューに追加しました",
+    "Monitor run completed": "監視実行が完了しました",
+    "Monitor run failed": "監視実行に失敗しました",
     "Run monitor": "監視を実行",
     "Abnormal": "異常",
     "24h success rate": "24時間成功率",

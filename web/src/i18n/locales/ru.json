@@ -746,6 +746,8 @@
     "Failure threshold": "Порог ошибок",
     "Excluded model patterns": "Исключённые шаблоны моделей",
     "Monitor run queued": "Запуск мониторинга поставлен в очередь",
+    "Monitor run completed": "Запуск мониторинга завершён",
+    "Monitor run failed": "Ошибка запуска мониторинга",
     "Run monitor": "Запустить мониторинг",
     "Abnormal": "Неисправные",
     "24h success rate": "Успешность за 24 ч",

@@ -746,6 +746,8 @@
     "Failure threshold": "Failure threshold",
     "Excluded model patterns": "Excluded model patterns",
     "Monitor run queued": "Monitor run queued",
+    "Monitor run completed": "Monitor run completed",
+    "Monitor run failed": "Monitor run failed",
     "Run monitor": "Run monitor",
     "Abnormal": "Abnormal",
     "24h success rate": "24h success rate",

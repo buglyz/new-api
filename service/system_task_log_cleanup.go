@@ -149,6 +149,10 @@ func runLogCleanupTask(ctx context.Context, task *model.SystemTask, runnerID str
 		logSystemTaskLockError(ctx, task, err)
 		return
 	}
+	if err := ctx.Err(); err != nil {
+		failSystemTask(task, runnerID, err)
+		return
+	}
 
 	result := LogCleanupResult{DeletedCount: state.Processed}
 	if err := model.FinishSystemTask(task.TaskID, runnerID, model.SystemTaskStatusSucceeded, result, ""); err != nil {
