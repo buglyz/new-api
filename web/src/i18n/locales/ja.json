@@ -748,6 +748,7 @@
     "Monitor run queued": "監視実行をキューに追加しました",
     "Monitor run completed": "監視実行が完了しました",
     "Monitor run failed": "監視実行に失敗しました",
+    "Monitor status unavailable; retrying": "監視状態を確認できません。再試行しています",
     "Run monitor": "監視を実行",
     "Abnormal": "異常",
     "24h success rate": "24時間成功率",

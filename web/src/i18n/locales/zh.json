@@ -748,6 +748,7 @@
     "Monitor run queued": "监控任务已加入队列",
     "Monitor run completed": "监控任务已完成",
     "Monitor run failed": "监控任务失败",
+    "Monitor status unavailable; retrying": "暂时无法确认监控状态，正在重试",
     "Run monitor": "运行监控",
     "Abnormal": "异常",
     "24h success rate": "24 小时成功率",

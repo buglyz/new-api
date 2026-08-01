@@ -748,6 +748,7 @@
     "Monitor run queued": "Monitor run queued",
     "Monitor run completed": "Monitor run completed",
     "Monitor run failed": "Monitor run failed",
+    "Monitor status unavailable; retrying": "Monitor status unavailable; retrying",
     "Run monitor": "Run monitor",
     "Abnormal": "Abnormal",
     "24h success rate": "24h success rate",

@@ -205,6 +205,11 @@ func validateOptionValue(key string, value string) error {
 	if key == operation_setting.ToolPriceOptionKey {
 		return operation_setting.ValidateToolPricesJSON(value)
 	}
+	if strings.HasPrefix(key, nativeMonitorOptionPrefix) {
+		return operation_setting.ValidateNativeMonitorSettingValues(map[string]string{
+			strings.TrimPrefix(key, nativeMonitorOptionPrefix): value,
+		})
+	}
 	return nil
 }
 

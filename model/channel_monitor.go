@@ -16,7 +16,6 @@ const (
 	ChannelMonitorHealthDegraded  = "degraded"
 	ChannelMonitorHealthDown      = "down"
 	channelMonitorDeleteBatchSize = 100
-	channelMonitorWindowSeconds   = 24 * 60 * 60
 )
 
 type ChannelMonitorResult struct {
@@ -104,9 +103,8 @@ func CreateChannelMonitorResult(result ChannelMonitorResult, failureThreshold, h
 			return nil
 		}
 		var staleIDs []int64
-		cutoff := common.GetTimestamp() - channelMonitorWindowSeconds
 		if err := tx.Model(&ChannelMonitorResult{}).
-			Where("channel_id = ? AND model = ? AND created_at < ?", result.ChannelID, result.Model, cutoff).
+			Where("channel_id = ? AND model = ?", result.ChannelID, result.Model).
 			Order("created_at asc, id asc").Limit(staleCount).Pluck("id", &staleIDs).Error; err != nil {
 			return err
 		}

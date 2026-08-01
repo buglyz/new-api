@@ -39,10 +39,17 @@ export function useChannelMonitorTask() {
     },
     enabled: Boolean(taskID),
     refetchInterval: (query) => {
+      if (
+        query.state.error ||
+        (query.state.data &&
+          (!query.state.data.success || !query.state.data.data))
+      ) {
+        return 5000
+      }
       const status = query.state.data?.data?.status
       return isActiveTaskStatus(status) ? 1000 : false
     },
-    retry: false,
+    retry: 3,
   })
 
   useEffect(() => {
@@ -52,9 +59,6 @@ export function useChannelMonitorTask() {
       taskQuery.isError ||
       (response && (!response.success || !response.data))
     ) {
-      setTaskID(null)
-      toast.error(t('Monitor run failed'))
-      void queryClient.invalidateQueries({ queryKey: ['channel-monitor'] })
       return
     }
 
@@ -79,6 +83,11 @@ export function useChannelMonitorTask() {
 
   return {
     isWatchingTask: Boolean(taskID),
+    isStatusUnknown: Boolean(
+      taskID &&
+      (taskQuery.isError ||
+        (taskQuery.data && (!taskQuery.data.success || !taskQuery.data.data)))
+    ),
     watchTask,
   }
 }

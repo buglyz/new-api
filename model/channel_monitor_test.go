@@ -85,7 +85,7 @@ func TestChannelMonitorTargetsUseSecondTimestampsForStats(t *testing.T) {
 	assert.InDelta(t, 1.0, targets[0].SuccessRate24H, 0.001)
 }
 
-func TestChannelMonitorPruningPreservesAllRecentManualRuns(t *testing.T) {
+func TestChannelMonitorPruningEnforcesLimitForRecentManualRuns(t *testing.T) {
 	truncateTables(t)
 	now := common.GetTimestamp()
 	for index := range 4 {
@@ -98,7 +98,7 @@ func TestChannelMonitorPruningPreservesAllRecentManualRuns(t *testing.T) {
 
 	history, err := ListChannelMonitorHistory(3, "manual-model", 10)
 	require.NoError(t, err)
-	assert.Len(t, history, 4)
+	assert.Len(t, history, 3)
 }
 
 func TestDeleteStaleChannelMonitorTargetsRemovesOnlyUnknownTargets(t *testing.T) {

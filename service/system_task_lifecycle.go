@@ -80,7 +80,7 @@ func CancelSystemTaskRunner() {
 	}
 }
 
-func CancelSystemTaskType(taskType string) {
+func CancelSystemTaskType(taskType string) error {
 	systemTaskRunsMu.Lock()
 	runs := make([]context.CancelFunc, 0, len(systemTaskRuns[taskType]))
 	for _, cancel := range systemTaskRuns[taskType] {
@@ -90,6 +90,7 @@ func CancelSystemTaskType(taskType string) {
 	for _, cancel := range runs {
 		cancel()
 	}
+	return model.CancelSystemTasks(taskType, "task canceled because it was disabled")
 }
 
 func registerSystemTaskRun(taskType, taskID string, parent context.Context) (context.Context, context.CancelFunc) {

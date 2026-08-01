@@ -3,6 +3,7 @@ package model
 import (
 	"sort"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
@@ -74,7 +75,11 @@ func GetChannelRouteCandidates(group, modelName, requestPath string) ([]ChannelR
 
 func getRoutePreviewAbilities(group, modelName string) ([]Ability, error) {
 	var abilities []Ability
-	err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true).
+	err := DB.Table("abilities").
+		Select("abilities.*").
+		Joins("JOIN channels ON abilities.channel_id = channels.id").
+		Where("abilities."+commonGroupCol+" = ? AND abilities.model = ? AND abilities.enabled = ?", group, modelName, true).
+		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Find(&abilities).Error
 	return abilities, err
 }

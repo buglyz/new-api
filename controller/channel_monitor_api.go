@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"path"
 	"strconv"
 	"strings"
 
@@ -104,7 +103,10 @@ func UpdateChannelMonitorConfig(c *gin.Context) {
 		return
 	}
 	if !setting.Enabled {
-		service.CancelSystemTaskType(model.SystemTaskTypeChannelMonitor)
+		if err := service.CancelSystemTaskType(model.SystemTaskTypeChannelMonitor); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	service.WakeSystemTaskRunner()
 	recordManageAudit(c, "channel_monitor.update", map[string]interface{}{"enabled": setting.Enabled})
@@ -159,41 +161,7 @@ func normalizeChannelMonitorConfig(request channelMonitorConfigRequest) (operati
 		ConfirmRetries:           request.ConfirmRetries,
 		ConfirmRetryDelaySeconds: request.ConfirmRetryDelaySeconds,
 		FailureThreshold:         request.FailureThreshold,
+		ExcludePatterns:          request.ExcludePatterns,
 	}
-	if setting.IntervalMinutes < 1 || setting.IntervalMinutes > 1440 {
-		return setting, channelMonitorConfigError("interval_minutes must be between 1 and 1440")
-	}
-	if setting.Concurrency < 1 || setting.Concurrency > 32 {
-		return setting, channelMonitorConfigError("concurrency must be between 1 and 32")
-	}
-	if setting.TimeoutSeconds < 1 || setting.TimeoutSeconds > 120 {
-		return setting, channelMonitorConfigError("timeout_seconds must be between 1 and 120")
-	}
-	if setting.ConfirmRetries < 0 || setting.ConfirmRetries > 3 {
-		return setting, channelMonitorConfigError("confirm_retries must be between 0 and 3")
-	}
-	if setting.ConfirmRetryDelaySeconds < 0 || setting.ConfirmRetryDelaySeconds > 60 {
-		return setting, channelMonitorConfigError("confirm_retry_delay_seconds must be between 0 and 60")
-	}
-	if setting.FailureThreshold < 1 || setting.FailureThreshold > 10 {
-		return setting, channelMonitorConfigError("failure_threshold must be between 1 and 10")
-	}
-	if len(request.ExcludePatterns) > 100 {
-		return setting, channelMonitorConfigError("exclude_patterns cannot contain more than 100 entries")
-	}
-	for _, pattern := range request.ExcludePatterns {
-		pattern = strings.TrimSpace(pattern)
-		if pattern == "" || len(pattern) > 255 {
-			return setting, channelMonitorConfigError("each exclude pattern must be between 1 and 255 characters")
-		}
-		if _, err := path.Match(strings.ToLower(pattern), "probe-model"); err != nil {
-			return setting, channelMonitorConfigError("exclude_patterns contains an invalid wildcard")
-		}
-		setting.ExcludePatterns = append(setting.ExcludePatterns, pattern)
-	}
-	return setting, nil
+	return operation_setting.NormalizeNativeMonitorSetting(setting)
 }
-
-type channelMonitorConfigError string
-
-func (err channelMonitorConfigError) Error() string { return string(err) }

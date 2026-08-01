@@ -233,6 +233,13 @@ func runWithLeaseHeartbeat(parent context.Context, task *model.SystemTask, runne
 			case <-done:
 				return
 			case <-ticker.C:
+				if task != nil && task.TaskID != "" {
+					canceled, err := model.IsSystemTaskCancellationRequested(task.TaskID)
+					if err != nil || canceled {
+						cancel()
+						return
+					}
+				}
 				if err := model.RenewSystemTaskLock(task.TaskID, runnerID, systemTaskLockUntil()); err != nil {
 					cancel()
 					return

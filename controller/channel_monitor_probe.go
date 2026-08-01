@@ -79,7 +79,6 @@ func channelMonitorEndpointType(channel *model.Channel, modelName string) (strin
 			return "", false
 		}
 	}
-	lower := strings.ToLower(strings.TrimSpace(modelName))
 	unsupported := []string{
 		"audio", "realtime", "whisper", "tts", "moderation", "sora", "video",
 		"image", "imagen", "seedream", "seedance", "cogview", "kolors", "flux",

@@ -28,11 +28,13 @@ func TestGetChannelRouteCandidatesReturnsPriorityOrderedEnabledAbilities(t *test
 		{Id: 1, Name: "primary", Key: "masked", Status: common.ChannelStatusEnabled},
 		{Id: 2, Name: "backup", Key: "masked", Status: common.ChannelStatusEnabled},
 		{Id: 3, Name: "last", Key: "masked", Status: common.ChannelStatusEnabled},
+		{Id: 4, Name: "disabled", Key: "masked", Status: common.ChannelStatusManuallyDisabled},
 	}).Error)
 	require.NoError(t, db.Create(&[]Ability{
 		{Group: "default", Model: "model-a", ChannelId: 2, Enabled: true, Priority: &priorityLow, Weight: 0},
 		{Group: "default", Model: "model-a", ChannelId: 1, Enabled: true, Priority: &priorityHigh, Weight: 5},
 		{Group: "default", Model: "model-a", ChannelId: 3, Enabled: true, Priority: &priorityLast, Weight: 9},
+		{Group: "default", Model: "model-a", ChannelId: 4, Enabled: true, Priority: &priorityHigh, Weight: 9},
 	}).Error)
 
 	candidates, err := GetChannelRouteCandidates("default", "model-a", "/v1/chat/completions")
@@ -48,14 +50,14 @@ func TestGetChannelRouteCandidatesReturnsPriorityOrderedEnabledAbilities(t *test
 	assert.Equal(t, 1, selected.Id)
 
 	selected, err = GetChannel("default", "model-a", 0, "/v1/chat/completions", func(channelID int) bool {
-		return channelID != 1
+		return channelID != 1 && channelID != 4
 	})
 	require.NoError(t, err)
 	require.NotNil(t, selected)
 	assert.Equal(t, 2, selected.Id)
 
 	selected, err = GetChannel("default", "model-a", 1, "/v1/chat/completions", func(channelID int) bool {
-		return channelID != 1
+		return channelID != 1 && channelID != 4
 	})
 	require.NoError(t, err)
 	require.NotNil(t, selected)

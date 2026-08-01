@@ -145,6 +145,11 @@ export function ChannelMonitor() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
+          {monitorTask.isStatusUnknown ? (
+            <div className='border px-4 py-3 text-sm' role='status'>
+              {t('Monitor status unavailable; retrying')}
+            </div>
+          ) : null}
           <div className='border'>
             <ChannelMonitorSettingsForm
               settings={settings}

@@ -74,6 +74,34 @@ func TestSystemTaskCreateAndActiveLifecycle(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCancelSystemTasksPropagatesAcrossPendingAndRunningRows(t *testing.T) {
+	truncateTables(t)
+	const taskType = "cancel-propagation"
+	running, err := CreateSystemTask(taskType, nil, nil)
+	require.NoError(t, err)
+	claimed, ok, err := ClaimSystemTask(running.ID, taskType, "runner-a", common.GetTimestamp()+60)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	pendingID, err := GenerateSystemTaskID()
+	require.NoError(t, err)
+	pending := &SystemTask{TaskID: pendingID, Type: taskType, Status: SystemTaskStatusPending}
+	require.NoError(t, DB.Create(pending).Error)
+
+	require.NoError(t, CancelSystemTasks(taskType, "monitor disabled"))
+	pending, err = GetSystemTaskByTaskID(pendingID)
+	require.NoError(t, err)
+	require.NotNil(t, pending)
+	assert.Equal(t, SystemTaskStatusFailed, pending.Status)
+	assert.Equal(t, "monitor disabled", pending.Error)
+
+	running, err = GetSystemTaskByTaskID(claimed.TaskID)
+	require.NoError(t, err)
+	require.NotNil(t, running)
+	assert.True(t, running.CancelRequested)
+	assert.Equal(t, SystemTaskStatusRunning, running.Status)
+}
+
 func TestSystemTaskActiveKeyPreventsDuplicateActiveRun(t *testing.T) {
 	truncateTables(t)
 

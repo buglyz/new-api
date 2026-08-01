@@ -27,18 +27,19 @@ const (
 var ErrSystemTaskLockLost = errors.New("system task lock lost")
 
 type SystemTask struct {
-	ID        int64            `json:"id" gorm:"primary_key"`
-	TaskID    string           `json:"task_id" gorm:"type:varchar(64);uniqueIndex"`
-	Type      string           `json:"type" gorm:"type:varchar(64);index"`
-	Status    SystemTaskStatus `json:"status" gorm:"type:varchar(32);index"`
-	ActiveKey *string          `json:"active_key,omitempty" gorm:"type:varchar(64);uniqueIndex"`
-	Payload   string           `json:"payload" gorm:"type:text"`
-	State     string           `json:"state" gorm:"type:text"`
-	Result    string           `json:"result" gorm:"type:text"`
-	Error     string           `json:"error" gorm:"type:text"`
-	LockedBy  string           `json:"locked_by" gorm:"type:varchar(128);index"`
-	CreatedAt int64            `json:"created_at" gorm:"bigint;index"`
-	UpdatedAt int64            `json:"updated_at" gorm:"bigint;index"`
+	ID              int64            `json:"id" gorm:"primary_key"`
+	TaskID          string           `json:"task_id" gorm:"type:varchar(64);uniqueIndex"`
+	Type            string           `json:"type" gorm:"type:varchar(64);index"`
+	Status          SystemTaskStatus `json:"status" gorm:"type:varchar(32);index"`
+	ActiveKey       *string          `json:"active_key,omitempty" gorm:"type:varchar(64);uniqueIndex"`
+	Payload         string           `json:"payload" gorm:"type:text"`
+	State           string           `json:"state" gorm:"type:text"`
+	Result          string           `json:"result" gorm:"type:text"`
+	Error           string           `json:"error" gorm:"type:text"`
+	CancelRequested bool             `json:"-" gorm:"index"`
+	LockedBy        string           `json:"locked_by" gorm:"type:varchar(128);index"`
+	CreatedAt       int64            `json:"created_at" gorm:"bigint;index"`
+	UpdatedAt       int64            `json:"updated_at" gorm:"bigint;index"`
 }
 
 type SystemTaskLock struct {
@@ -226,7 +227,7 @@ func GetLatestSystemTasks(taskTypes []string) (map[string]*SystemTask, error) {
 func ClaimSystemTask(id int64, taskType string, runnerID string, lockUntil int64) (*SystemTask, bool, error) {
 	now := common.GetTimestamp()
 	var task SystemTask
-	if err := DB.Where("id = ? AND type = ? AND status = ?", id, taskType, SystemTaskStatusPending).First(&task).Error; err != nil {
+	if err := DB.Where("id = ? AND type = ? AND status = ? AND cancel_requested = ?", id, taskType, SystemTaskStatusPending, false).First(&task).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, false, nil
 		}
@@ -245,7 +246,7 @@ func ClaimSystemTask(id int64, taskType string, runnerID string, lockUntil int64
 	}
 
 	result := DB.Model(&SystemTask{}).
-		Where("id = ? AND type = ? AND status = ?", id, taskType, SystemTaskStatusPending).
+		Where("id = ? AND type = ? AND status = ? AND cancel_requested = ?", id, taskType, SystemTaskStatusPending, false).
 		Updates(map[string]any{
 			"status":     SystemTaskStatusRunning,
 			"locked_by":  runnerID,

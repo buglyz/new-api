@@ -195,7 +195,7 @@ func TestChannelMonitorSkipsAliasesMappedToExpensiveModels(t *testing.T) {
 func TestChannelMonitorOverviewHidesTargetsThatAreNoLongerMonitorable(t *testing.T) {
 	channels := []*model.Channel{
 		{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "gpt-4o,excluded-model,gpt-image-1"},
-		{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusDisabled, Models: "disabled-model"},
+		{Id: 2, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusManuallyDisabled, Models: "disabled-model"},
 	}
 	targets := []model.ChannelMonitorTarget{
 		{ChannelID: 1, Model: "gpt-4o"},

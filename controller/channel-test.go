@@ -661,21 +661,16 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 			}
 		case constant.EndpointTypeAnthropic, constant.EndpointTypeGemini, constant.EndpointTypeOpenAI:
 			// 返回 GeneralOpenAIRequest
-			maxTokens := uint(16)
-			if constant.EndpointType(endpointType) == constant.EndpointTypeGemini && !quiet {
-				maxTokens = 3000
-			}
 			req := &dto.GeneralOpenAIRequest{
-				Model:  model,
-				Stream: lo.ToPtr(isStream),
+				Model: model, Stream: lo.ToPtr(isStream),
 				Messages: []dto.Message{
 					{
 						Role:    "user",
 						Content: "hi",
 					},
 				},
-				MaxTokens: lo.ToPtr(maxTokens),
 			}
+			configureChannelTestTokenLimit(req, model, quiet)
 			if isStream {
 				req.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
 			}

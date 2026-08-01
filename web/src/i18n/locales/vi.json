@@ -748,6 +748,7 @@
     "Monitor run queued": "Lần chạy giám sát đã được xếp hàng",
     "Monitor run completed": "Lần chạy giám sát đã hoàn tất",
     "Monitor run failed": "Lần chạy giám sát thất bại",
+    "Monitor status unavailable; retrying": "Không thể xác nhận trạng thái giám sát, đang thử lại",
     "Run monitor": "Chạy giám sát",
     "Abnormal": "Bất thường",
     "24h success rate": "Tỷ lệ thành công trong 24 giờ",

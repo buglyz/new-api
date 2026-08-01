@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
@@ -48,7 +48,10 @@ type ChannelMonitorSettingsProps = {
   onSave: (settings: ChannelMonitorSettings) => Promise<unknown>
 }
 
-type NumericFieldName = Exclude<keyof FormValues, 'enabled' | 'exclude_patterns'>
+type NumericFieldName = Exclude<
+  keyof FormValues,
+  'enabled' | 'exclude_patterns'
+>
 
 function toFormValues(settings: ChannelMonitorSettings): FormValues {
   return {
@@ -60,13 +63,15 @@ function toFormValues(settings: ChannelMonitorSettings): FormValues {
 export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
   const { t } = useTranslation()
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as unknown as Resolver<FormValues>,
     defaultValues: toFormValues(props.settings),
   })
 
   useEffect(() => {
-    form.reset(toFormValues(props.settings))
-  }, [form, props.settings])
+    if (!form.formState.isDirty) {
+      form.reset(toFormValues(props.settings))
+    }
+  }, [form, form.formState.isDirty, props.settings])
 
   const onSubmit = async (values: FormValues) => {
     await props.onSave({
@@ -76,6 +81,7 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
         .map((pattern) => pattern.trim())
         .filter(Boolean),
     })
+    form.reset(values)
   }
 
   return (
@@ -84,7 +90,10 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
       onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
     >
       <div className='flex items-center justify-between gap-4'>
-        <label className='text-sm font-medium' htmlFor='channel-monitor-enabled'>
+        <label
+          className='text-sm font-medium'
+          htmlFor='channel-monitor-enabled'
+        >
           {t('Enable channel monitoring')}
         </label>
         <Switch
@@ -97,15 +106,48 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
         />
       </div>
       <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
-        <NumericField form={form} name='interval_minutes' label={t('Interval (minutes)')} disabled={props.disabled} />
-        <NumericField form={form} name='concurrency' label={t('Concurrency')} disabled={props.disabled} />
-        <NumericField form={form} name='timeout_seconds' label={t('Timeout (seconds)')} disabled={props.disabled} />
-        <NumericField form={form} name='confirm_retries' label={t('Failure retries')} disabled={props.disabled} />
-        <NumericField form={form} name='confirm_retry_delay_seconds' label={t('Retry delay (seconds)')} disabled={props.disabled} />
-        <NumericField form={form} name='failure_threshold' label={t('Failure threshold')} disabled={props.disabled} />
+        <NumericField
+          form={form}
+          name='interval_minutes'
+          label={t('Interval (minutes)')}
+          disabled={props.disabled}
+        />
+        <NumericField
+          form={form}
+          name='concurrency'
+          label={t('Concurrency')}
+          disabled={props.disabled}
+        />
+        <NumericField
+          form={form}
+          name='timeout_seconds'
+          label={t('Timeout (seconds)')}
+          disabled={props.disabled}
+        />
+        <NumericField
+          form={form}
+          name='confirm_retries'
+          label={t('Failure retries')}
+          disabled={props.disabled}
+        />
+        <NumericField
+          form={form}
+          name='confirm_retry_delay_seconds'
+          label={t('Retry delay (seconds)')}
+          disabled={props.disabled}
+        />
+        <NumericField
+          form={form}
+          name='failure_threshold'
+          label={t('Failure threshold')}
+          disabled={props.disabled}
+        />
       </div>
       <div className='grid gap-1.5'>
-        <label className='text-sm font-medium' htmlFor='channel-monitor-exclusions'>
+        <label
+          className='text-sm font-medium'
+          htmlFor='channel-monitor-exclusions'
+        >
           {t('Excluded model patterns')}
         </label>
         <Textarea
@@ -117,7 +159,10 @@ export function ChannelMonitorSettingsForm(props: ChannelMonitorSettingsProps) {
         <FormError message={form.formState.errors.exclude_patterns?.message} />
       </div>
       <div className='flex justify-end'>
-        <Button type='submit' disabled={props.disabled || !form.formState.isDirty}>
+        <Button
+          type='submit'
+          disabled={props.disabled || !form.formState.isDirty}
+        >
           {t('Save changes')}
         </Button>
       </div>
@@ -136,7 +181,10 @@ function NumericField(props: NumericFieldProps) {
   const error = props.form.formState.errors[props.name]?.message
   return (
     <div className='grid gap-1.5'>
-      <label className='text-sm font-medium' htmlFor={`channel-monitor-${props.name}`}>
+      <label
+        className='text-sm font-medium'
+        htmlFor={`channel-monitor-${props.name}`}
+      >
         {props.label}
       </label>
       <Input

@@ -60,7 +60,8 @@ func nativeMonitorOptionField(key string) (string, bool) {
 	if !strings.HasPrefix(key, nativeMonitorOptionPrefix) {
 		return "", false
 	}
-	return strings.TrimPrefix(key, nativeMonitorOptionPrefix), true
+	field := strings.TrimPrefix(key, nativeMonitorOptionPrefix)
+	return field, operation_setting.IsNativeMonitorSettingField(field)
 }
 
 func containsNativeMonitorOptions(values map[string]string) bool {
