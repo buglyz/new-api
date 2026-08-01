@@ -106,16 +106,16 @@ func TestListChannelMonitorAvailabilityAggregatesHourlyBuckets(t *testing.T) {
 	require.NoError(t, err)
 	byKey := make(map[string]ChannelMonitorAvailabilityStat, len(stats))
 	for _, stat := range stats {
-		byKey[channelMonitorTargetKey(stat.ChannelID, strconv.FormatInt(stat.BucketStart, 10))] = stat
+		byKey[channelMonitorTargetKey(stat.ChannelID, stat.Model+"#"+strconv.FormatInt(stat.BucketStart, 10))] = stat
 	}
 
-	currentChannel := byKey[channelMonitorTargetKey(4, strconv.FormatInt(currentBucket, 10))]
+	currentChannel := byKey[channelMonitorTargetKey(4, "model-a#"+strconv.FormatInt(currentBucket, 10))]
 	assert.Equal(t, int64(2), currentChannel.Total)
 	assert.Equal(t, int64(1), currentChannel.Succeeded)
-	previousChannel := byKey[channelMonitorTargetKey(4, strconv.FormatInt(currentBucket-bucketSize, 10))]
+	previousChannel := byKey[channelMonitorTargetKey(4, "model-b#"+strconv.FormatInt(currentBucket-bucketSize, 10))]
 	assert.Equal(t, int64(1), previousChannel.Total)
 	assert.Equal(t, int64(1), previousChannel.Succeeded)
-	otherChannel := byKey[channelMonitorTargetKey(5, strconv.FormatInt(currentBucket, 10))]
+	otherChannel := byKey[channelMonitorTargetKey(5, "model-c#"+strconv.FormatInt(currentBucket, 10))]
 	assert.Equal(t, int64(1), otherChannel.Total)
 	assert.Zero(t, otherChannel.Succeeded)
 }

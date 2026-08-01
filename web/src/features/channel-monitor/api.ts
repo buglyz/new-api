@@ -20,7 +20,6 @@ import { api } from '@/lib/api'
 
 import type {
   ChannelMonitorConfigResponse,
-  ChannelMonitorHistoryResponse,
   ChannelMonitorOverviewResponse,
   ChannelMonitorSettings,
   ChannelMonitorTaskResponse,
@@ -48,17 +47,6 @@ export async function updateChannelMonitorConfig(
 export async function triggerChannelMonitor() {
   const response = await api.post<ChannelMonitorTriggerResponse>(
     '/api/channel-monitor/trigger'
-  )
-  return response.data
-}
-
-export async function getChannelMonitorHistory(
-  channelID: number,
-  model: string
-) {
-  const response = await api.get<ChannelMonitorHistoryResponse>(
-    '/api/channel-monitor/history',
-    { params: { channel_id: channelID, model, limit: 60 } }
   )
   return response.data
 }

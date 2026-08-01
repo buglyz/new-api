@@ -38,17 +38,15 @@ import {
   triggerChannelMonitor,
   updateChannelMonitorConfig,
 } from './api'
-import { ChannelMonitorHistoryPanel } from './components/channel-monitor-history-panel'
 import { ChannelMonitorSettingsDialog } from './components/channel-monitor-settings-dialog'
 import { ChannelMonitorTable } from './components/channel-monitor-table'
 import { useChannelMonitorTask } from './hooks/use-channel-monitor-task'
-import type { ChannelMonitorSettings, ChannelMonitorTarget } from './types'
+import type { ChannelMonitorSettings } from './types'
 
 export function ChannelMonitor() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('all')
-  const [selected, setSelected] = useState<ChannelMonitorTarget | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const monitorTask = useChannelMonitorTask()
   const overviewQuery = useQuery({
@@ -175,13 +173,7 @@ export function ChannelMonitor() {
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
-          <ChannelMonitorTable
-            targets={targets}
-            availability={availability}
-            selected={selected}
-            onSelect={setSelected}
-          />
-          <ChannelMonitorHistoryPanel target={selected} />
+          <ChannelMonitorTable targets={targets} availability={availability} />
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

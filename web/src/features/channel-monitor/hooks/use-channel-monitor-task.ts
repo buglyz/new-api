@@ -72,9 +72,6 @@ export function useChannelMonitorTask() {
       toast.error(task.error || t('Monitor run failed'))
     }
     void queryClient.invalidateQueries({ queryKey: ['channel-monitor'] })
-    void queryClient.invalidateQueries({
-      queryKey: ['channel-monitor-history'],
-    })
   }, [queryClient, taskID, taskQuery.data, taskQuery.isError, t])
 
   const watchTask = useCallback((nextTaskID: string) => {

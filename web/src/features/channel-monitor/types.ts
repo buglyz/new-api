@@ -61,11 +61,6 @@ export type ChannelMonitorTarget = {
   samples_24h: number
 }
 
-export type ChannelMonitorHistory = Omit<
-  ChannelMonitorTarget,
-  'success_rate_24h' | 'samples_24h'
-> & { id: number }
-
 export type ChannelMonitorAvailabilityPoint = {
   start_at: number
   end_at: number
@@ -74,9 +69,15 @@ export type ChannelMonitorAvailabilityPoint = {
   samples: number
 }
 
+export type ChannelMonitorAvailabilityModel = {
+  model: string
+  points: ChannelMonitorAvailabilityPoint[]
+}
+
 export type ChannelMonitorAvailability = {
   channel_id: number
   points: ChannelMonitorAvailabilityPoint[]
+  models: ChannelMonitorAvailabilityModel[]
 }
 
 export type ChannelMonitorOverviewResponse = {
@@ -89,12 +90,6 @@ export type ChannelMonitorOverviewResponse = {
     availability: ChannelMonitorAvailability[]
     task: ChannelMonitorTask | null
   }
-}
-
-export type ChannelMonitorHistoryResponse = {
-  success: boolean
-  message: string
-  data?: ChannelMonitorHistory[]
 }
 
 export type ChannelMonitorConfigResponse = {

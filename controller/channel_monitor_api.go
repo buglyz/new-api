@@ -45,9 +45,20 @@ type channelMonitorAvailabilityPoint struct {
 	Samples     int64    `json:"samples"`
 }
 
+type channelMonitorAvailabilityModel struct {
+	Model  string                            `json:"model"`
+	Points []channelMonitorAvailabilityPoint `json:"points"`
+}
+
 type channelMonitorAvailability struct {
 	ChannelID int                               `json:"channel_id"`
 	Points    []channelMonitorAvailabilityPoint `json:"points"`
+	Models    []channelMonitorAvailabilityModel `json:"models"`
+}
+
+type channelMonitorAvailabilityBucketStat struct {
+	Total     int64
+	Succeeded int64
 }
 
 func GetChannelMonitorOverview(c *gin.Context) {
@@ -104,19 +115,25 @@ func GetChannelMonitorOverview(c *gin.Context) {
 }
 
 func channelMonitorAvailabilityForTargets(targets []model.ChannelMonitorTarget, stats []model.ChannelMonitorAvailabilityStat, now int64) []channelMonitorAvailability {
-	statsByChannel := make(map[int]map[int64]model.ChannelMonitorAvailabilityStat)
+	statsByTarget := make(map[string]map[int64]channelMonitorAvailabilityBucketStat)
 	for _, stat := range stats {
-		byBucket := statsByChannel[stat.ChannelID]
+		targetKey := channelMonitorIdentity(stat.ChannelID, stat.Model)
+		byBucket := statsByTarget[targetKey]
 		if byBucket == nil {
-			byBucket = make(map[int64]model.ChannelMonitorAvailabilityStat)
-			statsByChannel[stat.ChannelID] = byBucket
+			byBucket = make(map[int64]channelMonitorAvailabilityBucketStat)
+			statsByTarget[targetKey] = byBucket
 		}
-		byBucket[stat.BucketStart] = stat
+		bucket := byBucket[stat.BucketStart]
+		bucket.Total += stat.Total
+		bucket.Succeeded += stat.Succeeded
+		byBucket[stat.BucketStart] = bucket
 	}
 
 	channelIDs := make([]int, 0, len(targets))
 	seenChannels := make(map[int]struct{}, len(targets))
+	targetsByChannel := make(map[int][]model.ChannelMonitorTarget)
 	for _, target := range targets {
+		targetsByChannel[target.ChannelID] = append(targetsByChannel[target.ChannelID], target)
 		if _, ok := seenChannels[target.ChannelID]; ok {
 			continue
 		}
@@ -129,25 +146,51 @@ func channelMonitorAvailabilityForTargets(targets []model.ChannelMonitorTarget, 
 	firstBucket := currentBucket - int64(channelMonitorAvailabilityBucketCount-1)*channelMonitorAvailabilityBucketSeconds
 	availability := make([]channelMonitorAvailability, 0, len(channelIDs))
 	for _, channelID := range channelIDs {
-		points := make([]channelMonitorAvailabilityPoint, 0, channelMonitorAvailabilityBucketCount)
-		byBucket := statsByChannel[channelID]
-		for index := 0; index < channelMonitorAvailabilityBucketCount; index++ {
-			startAt := firstBucket + int64(index)*channelMonitorAvailabilityBucketSeconds
-			point := channelMonitorAvailabilityPoint{
-				StartAt: startAt,
-				EndAt:   startAt + channelMonitorAvailabilityBucketSeconds,
+		channelTargets := targetsByChannel[channelID]
+		sort.Slice(channelTargets, func(left, right int) bool {
+			return channelTargets[left].Model < channelTargets[right].Model
+		})
+		channelStats := make(map[int64]channelMonitorAvailabilityBucketStat)
+		models := make([]channelMonitorAvailabilityModel, 0, len(channelTargets))
+		for _, target := range channelTargets {
+			byBucket := statsByTarget[channelMonitorIdentity(target.ChannelID, target.Model)]
+			for bucketStart, stat := range byBucket {
+				bucket := channelStats[bucketStart]
+				bucket.Total += stat.Total
+				bucket.Succeeded += stat.Succeeded
+				channelStats[bucketStart] = bucket
 			}
-			if stat, ok := byBucket[startAt]; ok && stat.Total > 0 {
-				rate := float64(stat.Succeeded) / float64(stat.Total)
-				point.SuccessRate = &rate
-				point.Succeeded = stat.Succeeded
-				point.Samples = stat.Total
-			}
-			points = append(points, point)
+			models = append(models, channelMonitorAvailabilityModel{
+				Model:  target.Model,
+				Points: channelMonitorAvailabilityPoints(firstBucket, byBucket),
+			})
 		}
-		availability = append(availability, channelMonitorAvailability{ChannelID: channelID, Points: points})
+		availability = append(availability, channelMonitorAvailability{
+			ChannelID: channelID,
+			Points:    channelMonitorAvailabilityPoints(firstBucket, channelStats),
+			Models:    models,
+		})
 	}
 	return availability
+}
+
+func channelMonitorAvailabilityPoints(firstBucket int64, stats map[int64]channelMonitorAvailabilityBucketStat) []channelMonitorAvailabilityPoint {
+	points := make([]channelMonitorAvailabilityPoint, 0, channelMonitorAvailabilityBucketCount)
+	for index := 0; index < channelMonitorAvailabilityBucketCount; index++ {
+		startAt := firstBucket + int64(index)*channelMonitorAvailabilityBucketSeconds
+		point := channelMonitorAvailabilityPoint{
+			StartAt: startAt,
+			EndAt:   startAt + channelMonitorAvailabilityBucketSeconds,
+		}
+		if stat, ok := stats[startAt]; ok && stat.Total > 0 {
+			rate := float64(stat.Succeeded) / float64(stat.Total)
+			point.SuccessRate = &rate
+			point.Succeeded = stat.Succeeded
+			point.Samples = stat.Total
+		}
+		points = append(points, point)
+	}
+	return points
 }
 
 func channelMonitorChannelOptions(channels []*model.Channel) []channelMonitorChannelOption {

@@ -66,6 +66,7 @@ type ChannelMonitorTargetRef struct {
 
 type ChannelMonitorAvailabilityStat struct {
 	ChannelID   int
+	Model       string
 	BucketStart int64
 	Total       int64
 	Succeeded   int64
@@ -196,9 +197,9 @@ func ListChannelMonitorAvailability(since, bucketSize int64) ([]ChannelMonitorAv
 	bucketExpr := channelMonitorBucketExpr(bucketSize)
 	var stats []ChannelMonitorAvailabilityStat
 	query := DB.Model(&ChannelMonitorResult{}).
-		Select(fmt.Sprintf("channel_id, %s AS bucket_start, COUNT(*) AS total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS succeeded", bucketExpr), ChannelMonitorStatusSuccess).
-		Group(fmt.Sprintf("channel_id, %s", bucketExpr)).
-		Order("bucket_start ASC, channel_id ASC")
+		Select(fmt.Sprintf("channel_id, model, %s AS bucket_start, COUNT(*) AS total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS succeeded", bucketExpr), ChannelMonitorStatusSuccess).
+		Group(fmt.Sprintf("channel_id, model, %s", bucketExpr)).
+		Order("bucket_start ASC, channel_id ASC, model ASC")
 	if since > 0 {
 		query = query.Where("created_at >= ?", since)
 	}

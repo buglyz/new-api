@@ -227,9 +227,10 @@ func TestChannelMonitorAvailabilityFillsEmptyHourlyBuckets(t *testing.T) {
 	now := common.GetTimestamp()
 	currentBucket := now - now%channelMonitorAvailabilityBucketSeconds
 	availability := channelMonitorAvailabilityForTargets(
-		[]model.ChannelMonitorTarget{{ChannelID: 4}},
+		[]model.ChannelMonitorTarget{{ChannelID: 4, Model: "model-a"}},
 		[]model.ChannelMonitorAvailabilityStat{{
 			ChannelID:   4,
+			Model:       "model-a",
 			BucketStart: currentBucket - channelMonitorAvailabilityBucketSeconds,
 			Total:       4,
 			Succeeded:   3,
@@ -245,6 +246,34 @@ func TestChannelMonitorAvailabilityFillsEmptyHourlyBuckets(t *testing.T) {
 	assert.InDelta(t, 0.75, *point.SuccessRate, 0.001)
 	assert.Equal(t, int64(3), point.Succeeded)
 	assert.Equal(t, int64(4), point.Samples)
+}
+
+func TestChannelMonitorAvailabilityIncludesModelBucketsAndChannelAggregate(t *testing.T) {
+	now := common.GetTimestamp()
+	currentBucket := now - now%channelMonitorAvailabilityBucketSeconds
+	availability := channelMonitorAvailabilityForTargets(
+		[]model.ChannelMonitorTarget{
+			{ChannelID: 5, Model: "model-b"},
+			{ChannelID: 5, Model: "model-a"},
+		},
+		[]model.ChannelMonitorAvailabilityStat{
+			{ChannelID: 5, Model: "model-a", BucketStart: currentBucket - channelMonitorAvailabilityBucketSeconds, Total: 2, Succeeded: 1},
+			{ChannelID: 5, Model: "model-b", BucketStart: currentBucket - channelMonitorAvailabilityBucketSeconds, Total: 1, Succeeded: 1},
+		},
+		now,
+	)
+
+	require.Len(t, availability, 1)
+	assert.Equal(t, []string{"model-a", "model-b"}, []string{
+		availability[0].Models[0].Model,
+		availability[0].Models[1].Model,
+	})
+	point := availability[0].Points[channelMonitorAvailabilityBucketCount-2]
+	modelPoint := availability[0].Models[0].Points[channelMonitorAvailabilityBucketCount-2]
+	require.NotNil(t, point.SuccessRate)
+	require.NotNil(t, modelPoint.SuccessRate)
+	assert.InDelta(t, 2.0/3.0, *point.SuccessRate, 0.001)
+	assert.InDelta(t, 0.5, *modelPoint.SuccessRate, 0.001)
 }
 
 func TestChannelMonitorQuietRequestLimitsOutputTokens(t *testing.T) {

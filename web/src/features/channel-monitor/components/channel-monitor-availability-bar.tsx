@@ -35,6 +35,7 @@ import type { ChannelMonitorAvailabilityPoint } from '../types'
 type ChannelMonitorAvailabilityBarProps = {
   points: ChannelMonitorAvailabilityPoint[]
   overall: number | null
+  showOverall?: boolean
   className?: string
 }
 
@@ -46,6 +47,7 @@ export function ChannelMonitorAvailabilityBar(
   props: ChannelMonitorAvailabilityBarProps
 ) {
   const { t } = useTranslation()
+  const showOverall = props.showOverall ?? true
 
   if (props.points.length === 0) {
     return <span className='text-muted-foreground text-xs'>{t('No data')}</span>
@@ -99,16 +101,18 @@ export function ChannelMonitorAvailabilityBar(
           )
         })}
       </div>
-      <span
-        className={cn(
-          'shrink-0 font-mono text-xs font-semibold tabular-nums',
-          props.overall === null
-            ? 'text-muted-foreground'
-            : getSuccessRateTextClass(props.overall * 100)
-        )}
-      >
-        {formatRate(props.overall)}
-      </span>
+      {showOverall && (
+        <span
+          className={cn(
+            'shrink-0 font-mono text-xs font-semibold tabular-nums',
+            props.overall === null
+              ? 'text-muted-foreground'
+              : getSuccessRateTextClass(props.overall * 100)
+          )}
+        >
+          {formatRate(props.overall)}
+        </span>
+      )}
     </div>
   )
 }

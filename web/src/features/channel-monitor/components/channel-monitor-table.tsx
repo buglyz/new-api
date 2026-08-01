@@ -20,20 +20,11 @@ import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { formatTimestampToDate } from '@/lib/format'
 
 import { groupChannelMonitorTargets } from '../lib/channel-monitor-groups'
@@ -43,8 +34,6 @@ import { ChannelMonitorAvailabilityBar } from './channel-monitor-availability-ba
 type ChannelMonitorTableProps = {
   targets: ChannelMonitorTarget[]
   availability: ChannelMonitorAvailability[]
-  selected: ChannelMonitorTarget | null
-  onSelect: (target: ChannelMonitorTarget) => void
 }
 
 function healthVariant(health: ChannelMonitorTarget['health']) {
@@ -62,6 +51,13 @@ export function ChannelMonitorTable(props: ChannelMonitorTableProps) {
   const groups = groupChannelMonitorTargets(props.targets)
   const availabilityByChannel = new Map(
     props.availability.map((item) => [item.channel_id, item])
+  )
+  const availabilityByTarget = new Map(
+    props.availability.flatMap((item) =>
+      item.models.map(
+        (model) => [`${item.channel_id}#${model.model}`, model] as const
+      )
+    )
   )
 
   if (groups.length === 0) {
@@ -110,52 +106,30 @@ export function ChannelMonitorTable(props: ChannelMonitorTableProps) {
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className='border-t'>
-            <div className='overflow-x-auto'>
-              <Table className='min-w-[860px]'>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('Model')}</TableHead>
-                    <TableHead>{t('Health')}</TableHead>
-                    <TableHead>{t('Latency')}</TableHead>
-                    <TableHead>{t('24h success rate')}</TableHead>
-                    <TableHead>{t('Last checked')}</TableHead>
-                    <TableHead>{t('Detail')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {group.targets.map((target) => (
-                    <TableRow key={`${target.channel_id}-${target.model}`}>
-                      <TableCell className='max-w-56 truncate font-mono'>
-                        {target.model}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={healthVariant(target.health)}>
-                          {t(target.health)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{target.latency_ms}ms</TableCell>
-                      <TableCell>
-                        {formatSuccessRate(
-                          target.samples_24h ? target.success_rate_24h : null
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {formatTimestampToDate(target.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type='button'
-                          size='sm'
-                          variant='outline'
-                          onClick={() => props.onSelect(target)}
-                        >
-                          {t('History')}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <div className='divide-y'>
+              {group.targets.map((target) => {
+                const modelAvailability = availabilityByTarget.get(
+                  `${target.channel_id}#${target.model}`
+                )
+                return (
+                  <div
+                    key={`${target.channel_id}-${target.model}`}
+                    className='px-4 py-3 sm:px-5'
+                  >
+                    <div className='mb-2 truncate font-mono text-sm'>
+                      {target.model}
+                    </div>
+                    <ChannelMonitorAvailabilityBar
+                      points={modelAvailability?.points ?? []}
+                      overall={
+                        target.samples_24h ? target.success_rate_24h : null
+                      }
+                      showOverall={false}
+                      className='w-full max-w-xl'
+                    />
+                  </div>
+                )
+              })}
             </div>
           </CollapsibleContent>
         </Collapsible>
