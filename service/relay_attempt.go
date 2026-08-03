@@ -141,6 +141,9 @@ func ClassifyRelayAttempt(relayErr *types.NewAPIError) RelayAttemptOutcome {
 	if relayErr.StatusCode >= 500 && relayErr.StatusCode <= 599 {
 		return RelayAttemptUpstream5xx
 	}
+	if relayErr.StatusCode == 408 || relayErr.StatusCode == 425 {
+		return RelayAttemptTransportError
+	}
 	if relayErr.StatusCode >= 400 && relayErr.StatusCode <= 499 {
 		return RelayAttemptClientError
 	}

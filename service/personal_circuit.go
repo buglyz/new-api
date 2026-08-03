@@ -221,7 +221,7 @@ func (m *personalCircuitManager) reset(channelIDs map[int]struct{}, modelName st
 		if _, ok := channelIDs[key.channelID]; !ok {
 			continue
 		}
-		if modelName != "" && key.model != modelName {
+		if modelName != "" && key.model != modelName && key.model != personalCircuitAllModels {
 			continue
 		}
 		transition := PersonalCircuitTransition{

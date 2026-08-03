@@ -77,6 +77,19 @@ func TestPersonalCircuitDoesNotOpenForClientOrLocalErrors(t *testing.T) {
 	assert.Empty(t, circuits)
 }
 
+func TestPersonalCircuitOpensForRequestTimeouts(t *testing.T) {
+	manager := newPersonalCircuitManager(time.Now)
+	for _, statusCode := range []int{408, 425} {
+		transition := manager.recordFailure(1, "channel", "model", RelayAttempt{
+			Outcome:    RelayAttemptTransportError,
+			StatusCode: statusCode,
+		})
+		require.NotNil(t, transition)
+		assert.False(t, manager.canAttempt(1, "model"))
+		manager.recordSuccess(1, "model")
+	}
+}
+
 func TestPersonalCircuitHonorsRetryAfterWithinCap(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
@@ -122,6 +135,17 @@ func TestPersonalCircuitResetKeepsUntestedModelsOpen(t *testing.T) {
 	require.Len(t, transitions, 1)
 	assert.True(t, manager.canAttempt(1, "tested-model"))
 	assert.False(t, manager.canAttempt(1, "other-model"))
+}
+
+func TestPersonalCircuitResetModelAlsoClearsChannelWideCircuit(t *testing.T) {
+	manager := newPersonalCircuitManager(time.Now)
+	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401})
+	assert.False(t, manager.canAttempt(1, "model"))
+
+	transitions := manager.reset(map[int]struct{}{1: {}}, "model")
+	require.Len(t, transitions, 1)
+	assert.Equal(t, personalCircuitAllModels, transitions[0].Model)
+	assert.True(t, manager.canAttempt(1, "model"))
 }
 
 func TestPersonalCircuitGateIsDisabledInStandardMode(t *testing.T) {

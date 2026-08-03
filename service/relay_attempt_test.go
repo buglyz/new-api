@@ -27,6 +27,8 @@ func TestClassifyRelayAttemptUsesStructuredErrorFields(t *testing.T) {
 		{name: "no channel key", err: types.NewError(errors.New("no key"), types.ErrorCodeChannelNoAvailableKey), outcome: RelayAttemptChannelUnavailable},
 		{name: "invalid parameter override", err: types.NewError(errors.New("bad config"), types.ErrorCodeChannelParamOverrideInvalid), outcome: RelayAttemptChannelUnavailable},
 		{name: "model", err: types.NewOpenAIError(errors.New("missing"), types.ErrorCodeModelNotFound, 404), outcome: RelayAttemptModelUnavailable},
+		{name: "request timeout", err: types.NewOpenAIError(errors.New("timeout"), types.ErrorCodeBadResponseStatusCode, 408), outcome: RelayAttemptTransportError},
+		{name: "too early", err: types.NewOpenAIError(errors.New("too early"), types.ErrorCodeBadResponseStatusCode, 425), outcome: RelayAttemptTransportError},
 		{name: "client", err: types.NewOpenAIError(errors.New("bad"), types.ErrorCodeBadResponseStatusCode, 400), outcome: RelayAttemptClientError},
 	}
 	for _, test := range tests {

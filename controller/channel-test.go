@@ -425,6 +425,9 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
+	if respErr == nil {
+		respErr = helper.StreamStatusError(info)
+	}
 	if respErr != nil {
 		return testResult{
 			context:     c,

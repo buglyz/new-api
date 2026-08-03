@@ -207,6 +207,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		default:
 			newAPIError = relayHandler(c, relayInfo)
 		}
+		if newAPIError == nil {
+			newAPIError = helper.StreamStatusError(relayInfo)
+		}
 
 		if newAPIError == nil {
 			service.CompleteRelayAttempt(c, attemptIndex, nil, false)
@@ -217,7 +220,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		relayInfo.LastError = newAPIError
 
-		willRetry := shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry())
+		willRetry := shouldRetryRelayAttempt(c, relayInfo, newAPIError, common.RetryTimes-retryParam.GetRetry())
 		attempt := service.CompleteRelayAttempt(c, attemptIndex, newAPIError, willRetry)
 		service.RecordPersonalCircuitFailure(channel.Id, channel.Name, relayInfo.OriginModelName, attempt)
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, willRetry)
@@ -295,13 +298,14 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
-	if types.IsSkipRetryError(openaiErr) {
+	attemptOutcome := service.ClassifyRelayAttempt(openaiErr)
+	if types.IsSkipRetryError(openaiErr) && attemptOutcome != service.RelayAttemptChannelUnavailable {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
 		return true
 	}
-	if service.ClassifyRelayAttempt(openaiErr) == service.RelayAttemptModelUnavailable {
+	if attemptOutcome == service.RelayAttemptModelUnavailable {
 		return true
 	}
 	code := openaiErr.StatusCode

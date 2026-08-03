@@ -147,12 +147,7 @@ func SimulatePersonalRoute(c *gin.Context) {
 		return
 	}
 	circuits, _, _ := service.GetPersonalCircuitSnapshot()
-	circuitByChannel := make(map[int]service.PersonalCircuit, len(circuits))
-	for _, circuit := range circuits {
-		if circuit.Model == request.Model {
-			circuitByChannel[circuit.ChannelID] = circuit
-		}
-	}
+	circuitByChannel := personalCircuitPreviewIndex(circuits, request.Model)
 	preview := make([]personalRoutePreviewCandidate, 0, len(candidates))
 	var highestAvailablePriority *int64
 	for _, candidate := range candidates {
@@ -177,4 +172,21 @@ func SimulatePersonalRoute(c *gin.Context) {
 		"strategy": "priority_then_weighted_random", "highest_available_priority": highestAvailablePriority,
 		"candidates": preview,
 	})
+}
+
+func personalCircuitPreviewIndex(circuits []service.PersonalCircuit, modelName string) map[int]service.PersonalCircuit {
+	index := make(map[int]service.PersonalCircuit)
+	for _, circuit := range circuits {
+		if circuit.Model == modelName {
+			index[circuit.ChannelID] = circuit
+		}
+	}
+	for _, circuit := range circuits {
+		if circuit.Model == "*" {
+			if _, exists := index[circuit.ChannelID]; !exists {
+				index[circuit.ChannelID] = circuit
+			}
+		}
+	}
+	return index
 }

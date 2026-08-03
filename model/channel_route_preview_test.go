@@ -47,7 +47,7 @@ func TestGetChannelRouteCandidatesReturnsPriorityOrderedEnabledAbilities(t *test
 	selected, err := GetChannel("default", "model-a", 0, "/v1/chat/completions")
 	require.NoError(t, err)
 	require.NotNil(t, selected)
-	assert.Equal(t, 1, selected.Id)
+	assert.Contains(t, []int{1, 4}, selected.Id)
 
 	selected, err = GetChannel("default", "model-a", 0, "/v1/chat/completions", func(channelID int) bool {
 		return channelID != 1 && channelID != 4
