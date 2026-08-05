@@ -54,6 +54,14 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
+			// Token-pinned channels bypass the normal channel-selection path but
+			// must still respect personal circuit breakers. Without this check the
+			// channel receives traffic while Open and failures accumulate without
+			// any gate reading them.
+			if !service.ClaimPersonalCircuit(channel.Id, modelRequest.Model) {
+				abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+				return
+			}
 		} else {
 			// Select a channel for the user
 			// check token model mapping

@@ -145,11 +145,15 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.now()
+	// circuitModel is derived solely from the failure type: AuthError and
+	// ChannelUnavailable produce a channel-wide "*" entry; all other outcomes
+	// are tracked per-model. The previous behaviour of promoting any failure to
+	// channel-level whenever a "*" entry already existed caused unrelated
+	// transient errors (e.g. 429 on a different model during a half-open probe)
+	// to amplify the shared ConsecutiveFailures counter and push the backoff
+	// toward the 15-minute ceiling far faster than any single model's true
+	// error rate would warrant.
 	circuitModel := personalCircuitModel(attempt.Outcome, modelName)
-	globalKey := personalCircuitKey{channelID: channelID, model: personalCircuitAllModels}
-	if m.entries[globalKey] != nil {
-		circuitModel = personalCircuitAllModels
-	}
 	key := personalCircuitKey{channelID: channelID, model: circuitModel}
 	if circuitModel == personalCircuitAllModels {
 		for existingKey := range m.entries {
@@ -180,7 +184,7 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 		return nil
 	}
 	transition := PersonalCircuitTransition{
-		ChannelID: channelID, ChannelName: channelName, Model: modelName,
+		ChannelID: channelID, ChannelName: channelName, Model: circuitModel,
 		From: from, To: PersonalCircuitOpen, At: now.Unix(), Outcome: attempt.Outcome,
 		StatusCode: attempt.StatusCode, ErrorCode: attempt.ErrorCode, RetryAt: entry.RetryAt,
 	}
