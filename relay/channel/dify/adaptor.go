@@ -105,10 +105,8 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
 	if info.IsStream {
 		return difyStreamHandler(c, info, resp)
-	} else {
-		return difyHandler(c, info, resp)
 	}
-	return
+	return difyHandler(c, info, resp)
 }
 
 func (a *Adaptor) GetModelList() []string {

@@ -22,6 +22,8 @@ Validation note:
   `controller/misc.go`; the quality gate remains a full-repository Go format check.
 - The second workflow run exposed unreachable statements after panic calls in
   unsupported Claude converter paths; these now return explicit errors.
+- The third workflow run found a redundant unreachable return in Dify response
+  dispatch; the branch now returns directly.
 
 Deployment policy:
 
