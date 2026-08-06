@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 type PersonalCircuitStatus string
@@ -14,11 +16,12 @@ const (
 	PersonalCircuitOpen     PersonalCircuitStatus = "open"
 	PersonalCircuitHalfOpen PersonalCircuitStatus = "half_open"
 
-	personalCircuitBaseBackoff       = 30 * time.Second
-	personalCircuitMaxBackoff        = 15 * time.Minute
-	personalCircuitModelBackoff      = 30 * time.Minute
-	personalCircuitChannelBackoff    = 15 * time.Minute
-	personalCircuitHalfOpenLease     = 30 * time.Second
+	personalCircuitBaseBackoff       = 15 * time.Second
+	personalCircuitMaxBackoff        = 5 * time.Minute
+	personalCircuitModelBackoff      = 10 * time.Minute
+	personalCircuitAuthBackoff       = 15 * time.Minute
+	personalCircuitChannelBackoff    = 10 * time.Minute
+	personalCircuitHalfOpenLease     = 2 * time.Minute
 	personalCircuitNotifySuppression = 10 * time.Minute
 	personalCircuitMaxEntries        = 4096
 	personalCircuitMaxNotifications  = 1024
@@ -26,18 +29,20 @@ const (
 )
 
 type PersonalCircuit struct {
-	ChannelID           int                   `json:"channel_id"`
-	ChannelName         string                `json:"channel_name,omitempty"`
-	Model               string                `json:"model"`
-	Scope               string                `json:"scope"`
-	Status              PersonalCircuitStatus `json:"status"`
-	ConsecutiveFailures int                   `json:"consecutive_failures"`
-	OpenedAt            int64                 `json:"opened_at"`
-	RetryAt             int64                 `json:"retry_at"`
-	HalfOpenUntil       int64                 `json:"half_open_until,omitempty"`
-	LastOutcome         RelayAttemptOutcome   `json:"last_outcome"`
-	LastStatusCode      int                   `json:"last_status_code,omitempty"`
-	LastErrorCode       string                `json:"last_error_code,omitempty"`
+	ChannelID             int                   `json:"channel_id"`
+	ChannelName           string                `json:"channel_name,omitempty"`
+	Model                 string                `json:"model"`
+	Scope                 string                `json:"scope"`
+	Status                PersonalCircuitStatus `json:"status"`
+	ConsecutiveFailures   int                   `json:"consecutive_failures"`
+	OpenedAt              int64                 `json:"opened_at"`
+	RetryAt               int64                 `json:"retry_at"`
+	HalfOpenUntil         int64                 `json:"half_open_until,omitempty"`
+	LastOutcome           RelayAttemptOutcome   `json:"last_outcome"`
+	LastStatusCode        int                   `json:"last_status_code,omitempty"`
+	LastErrorCode         string                `json:"last_error_code,omitempty"`
+	halfOpenProbeInFlight bool
+	halfOpenProbeStarted  int64
 }
 
 type PersonalCircuitTransition struct {
@@ -57,6 +62,7 @@ type PersonalCircuitPolicy struct {
 	BaseBackoffSeconds    int64 `json:"base_backoff_seconds"`
 	MaxBackoffSeconds     int64 `json:"max_backoff_seconds"`
 	ModelBackoffSeconds   int64 `json:"model_backoff_seconds"`
+	AuthBackoffSeconds    int64 `json:"auth_backoff_seconds"`
 	ChannelBackoffSeconds int64 `json:"channel_backoff_seconds"`
 	HalfOpenLeaseSeconds  int64 `json:"half_open_lease_seconds"`
 	Volatile              bool  `json:"volatile"`
@@ -68,18 +74,20 @@ type personalCircuitKey struct {
 }
 
 type personalCircuitManager struct {
-	mu          sync.Mutex
-	now         func() time.Time
-	entries     map[personalCircuitKey]*PersonalCircuit
-	transitions []PersonalCircuitTransition
-	notifiedAt  map[string]time.Time
+	mu             sync.Mutex
+	now            func() time.Time
+	entries        map[personalCircuitKey]*PersonalCircuit
+	latestAttempts map[personalCircuitKey]int64
+	transitions    []PersonalCircuitTransition
+	notifiedAt     map[string]time.Time
 }
 
 func newPersonalCircuitManager(now func() time.Time) *personalCircuitManager {
 	return &personalCircuitManager{
-		now:        now,
-		entries:    map[personalCircuitKey]*PersonalCircuit{},
-		notifiedAt: map[string]time.Time{},
+		now:            now,
+		entries:        map[personalCircuitKey]*PersonalCircuit{},
+		latestAttempts: map[personalCircuitKey]int64{},
+		notifiedAt:     map[string]time.Time{},
 	}
 }
 
@@ -97,6 +105,9 @@ func (m *personalCircuitManager) canAttempt(channelID int, modelName string) boo
 	case PersonalCircuitOpen:
 		return now >= entry.RetryAt
 	case PersonalCircuitHalfOpen:
+		if !entry.halfOpenProbeInFlight {
+			return true
+		}
 		return now >= entry.HalfOpenUntil
 	default:
 		return true
@@ -111,7 +122,7 @@ func (m *personalCircuitManager) claim(channelID int, modelName string) bool {
 		return true
 	}
 	now := m.now()
-	if entry.Status == PersonalCircuitHalfOpen && now.Unix() < entry.HalfOpenUntil {
+	if entry.Status == PersonalCircuitHalfOpen && entry.halfOpenProbeInFlight && now.Unix() < entry.HalfOpenUntil {
 		return false
 	}
 	if entry.Status == PersonalCircuitOpen && now.Unix() < entry.RetryAt {
@@ -120,6 +131,8 @@ func (m *personalCircuitManager) claim(channelID int, modelName string) bool {
 	from := entry.Status
 	entry.Status = PersonalCircuitHalfOpen
 	entry.HalfOpenUntil = now.Add(personalCircuitHalfOpenLease).Unix()
+	entry.halfOpenProbeInFlight = true
+	entry.halfOpenProbeStarted = now.UnixMilli()
 	if from != PersonalCircuitHalfOpen {
 		m.appendTransitionLocked(PersonalCircuitTransition{
 			ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
@@ -145,19 +158,18 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.now()
-	// circuitModel is derived solely from the failure type: AuthError and
-	// ChannelUnavailable produce a channel-wide "*" entry; all other outcomes
-	// are tracked per-model. The previous behaviour of promoting any failure to
-	// channel-level whenever a "*" entry already existed caused unrelated
-	// transient errors (e.g. 429 on a different model during a half-open probe)
-	// to amplify the shared ConsecutiveFailures counter and push the backoff
-	// toward the 15-minute ceiling far faster than any single model's true
-	// error rate would warrant.
-	circuitModel := personalCircuitModel(attempt.Outcome, modelName)
+	// Keep model-specific configuration errors from taking unrelated models out
+	// of rotation. Authentication and genuinely channel-wide failures still use
+	// the shared "*" entry.
+	circuitModel := personalCircuitModel(attempt, modelName)
 	key := personalCircuitKey{channelID: channelID, model: circuitModel}
+	if m.staleAttemptLocked(key, attempt) || staleHalfOpenProbe(m.entryForAttemptLocked(channelID, modelName), attempt) {
+		return nil
+	}
 	if circuitModel == personalCircuitAllModels {
 		for existingKey := range m.entries {
 			if existingKey.channelID == channelID && existingKey != key {
+				m.markAttemptLocked(existingKey, attempt)
 				delete(m.entries, existingKey)
 			}
 		}
@@ -171,6 +183,7 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	} else {
 		from = entry.Status
 	}
+	m.markAttemptLocked(key, attempt)
 	entry.ChannelName = channelName
 	entry.Status = PersonalCircuitOpen
 	entry.ConsecutiveFailures++
@@ -179,6 +192,8 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	entry.LastOutcome = attempt.Outcome
 	entry.LastStatusCode = attempt.StatusCode
 	entry.LastErrorCode = attempt.ErrorCode
+	entry.halfOpenProbeInFlight = false
+	entry.halfOpenProbeStarted = 0
 	entry.RetryAt = now.Add(personalCircuitBackoff(attempt, entry.ConsecutiveFailures)).Unix()
 	if from == PersonalCircuitOpen {
 		return nil
@@ -192,7 +207,7 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	return &transition
 }
 
-func (m *personalCircuitManager) recordSuccess(channelID int, modelName string) []PersonalCircuitTransition {
+func (m *personalCircuitManager) recordSuccess(channelID int, modelName string, attempt ...RelayAttempt) []PersonalCircuitTransition {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	keys := []personalCircuitKey{
@@ -205,6 +220,12 @@ func (m *personalCircuitManager) recordSuccess(channelID int, modelName string) 
 		if entry == nil {
 			continue
 		}
+		if len(attempt) > 0 && (m.staleAttemptLocked(key, attempt[0]) || staleHalfOpenProbe(entry, attempt[0])) {
+			continue
+		}
+		if len(attempt) > 0 {
+			m.markAttemptLocked(key, attempt[0])
+		}
 		delete(m.entries, key)
 		transition := PersonalCircuitTransition{
 			ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
@@ -214,6 +235,11 @@ func (m *personalCircuitManager) recordSuccess(channelID int, modelName string) 
 		transitions = append(transitions, transition)
 	}
 	return transitions
+}
+
+func staleHalfOpenProbe(entry *PersonalCircuit, attempt RelayAttempt) bool {
+	return entry != nil && entry.halfOpenProbeInFlight && attempt.StartedAtMs > 0 &&
+		entry.halfOpenProbeStarted > 0 && attempt.StartedAtMs < entry.halfOpenProbeStarted
 }
 
 func (m *personalCircuitManager) reset(channelIDs map[int]struct{}, modelName string) []PersonalCircuitTransition {
@@ -321,11 +347,23 @@ func opensPersonalCircuit(outcome RelayAttemptOutcome) bool {
 		outcome == RelayAttemptAuthError || outcome == RelayAttemptChannelUnavailable
 }
 
-func personalCircuitModel(outcome RelayAttemptOutcome, modelName string) string {
-	if outcome == RelayAttemptAuthError || outcome == RelayAttemptChannelUnavailable {
+func personalCircuitModel(attempt RelayAttempt, modelName string) string {
+	if attempt.Outcome == RelayAttemptAuthError ||
+		(attempt.Outcome == RelayAttemptChannelUnavailable && !isModelScopedChannelError(attempt)) {
 		return personalCircuitAllModels
 	}
 	return modelName
+}
+
+func isModelScopedChannelError(attempt RelayAttempt) bool {
+	switch types.ErrorCode(attempt.ErrorCode) {
+	case types.ErrorCodeChannelParamOverrideInvalid,
+		types.ErrorCodeChannelHeaderOverrideInvalid,
+		types.ErrorCodeChannelModelMappedError:
+		return true
+	default:
+		return false
+	}
 }
 
 func personalCircuitScope(modelName string) string {
@@ -339,7 +377,10 @@ func personalCircuitBackoff(attempt RelayAttempt, failures int) time.Duration {
 	if attempt.Outcome == RelayAttemptModelUnavailable {
 		return personalCircuitModelBackoff
 	}
-	if attempt.Outcome == RelayAttemptAuthError || attempt.Outcome == RelayAttemptChannelUnavailable {
+	if attempt.Outcome == RelayAttemptAuthError {
+		return personalCircuitAuthBackoff
+	}
+	if attempt.Outcome == RelayAttemptChannelUnavailable && !isModelScopedChannelError(attempt) {
 		return personalCircuitChannelBackoff
 	}
 	backoff := personalCircuitBaseBackoff

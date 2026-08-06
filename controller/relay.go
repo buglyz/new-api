@@ -212,8 +212,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
-			service.CompleteRelayAttempt(c, attemptIndex, nil, false)
-			service.RecordPersonalCircuitSuccess(channel.Id, relayInfo.OriginModelName)
+			attempt := service.CompleteRelayAttempt(c, attemptIndex, nil, false)
+			service.RecordPersonalCircuitSuccess(channel.Id, relayInfo.OriginModelName, attempt)
 			relayInfo.LastError = nil
 			return
 		}

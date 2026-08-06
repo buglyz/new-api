@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 
 	manager.recordFailure(3, "low-sla", "model-a", attempt)
 	circuits, _ := manager.snapshot()
-	assert.Equal(t, now.Add(30*time.Second).Unix(), circuits[0].RetryAt)
+	assert.Equal(t, now.Add(15*time.Second).Unix(), circuits[0].RetryAt)
 	assert.False(t, manager.claim(3, "model-a"))
 
 	now = now.Add(30 * time.Second)
@@ -43,7 +44,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 
 	manager.recordFailure(3, "low-sla", "model-a", attempt)
 	circuits, _ = manager.snapshot()
-	assert.Equal(t, now.Add(60*time.Second).Unix(), circuits[0].RetryAt)
+	assert.Equal(t, now.Add(30*time.Second).Unix(), circuits[0].RetryAt)
 
 	now = now.Add(60 * time.Second)
 	assert.True(t, manager.claim(3, "model-a"))
@@ -54,7 +55,8 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 }
 
 func TestPersonalCircuitOpensChannelWideForAuthAndConfigurationErrors(t *testing.T) {
-	manager := newPersonalCircuitManager(time.Now)
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
 	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401}))
 	assert.False(t, manager.canAttempt(1, "model-a"))
 	assert.False(t, manager.canAttempt(1, "model-b"))
@@ -63,10 +65,100 @@ func TestPersonalCircuitOpensChannelWideForAuthAndConfigurationErrors(t *testing
 	require.Len(t, circuits, 1)
 	assert.Equal(t, personalCircuitAllModels, circuits[0].Model)
 	assert.Equal(t, "channel", circuits[0].Scope)
+	assert.Equal(t, now.Add(personalCircuitAuthBackoff).Unix(), circuits[0].RetryAt)
 
 	manager.recordSuccess(1, "model-b")
 	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptChannelUnavailable}))
 	assert.False(t, manager.canAttempt(1, "model-b"))
+	circuits, _ = manager.snapshot()
+	require.Len(t, circuits, 1)
+	assert.Equal(t, now.Add(personalCircuitChannelBackoff).Unix(), circuits[0].RetryAt)
+}
+
+func TestPersonalCircuitScopesModelConfigurationErrorsToModel(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
+	attempt := RelayAttempt{
+		Outcome:   RelayAttemptChannelUnavailable,
+		ErrorCode: string(types.ErrorCodeChannelModelMappedError),
+	}
+
+	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", attempt))
+	assert.False(t, manager.canAttempt(1, "model-a"))
+	assert.True(t, manager.canAttempt(1, "model-b"))
+	circuits, _ := manager.snapshot()
+	require.Len(t, circuits, 1)
+	assert.Equal(t, "model", circuits[0].Scope)
+	assert.Equal(t, now.Add(personalCircuitBaseBackoff).Unix(), circuits[0].RetryAt)
+}
+
+func TestPersonalCircuitHalfOpenClaimHasSingleProbeUntilLeaseExpires(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
+	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+
+	now = now.Add(personalCircuitBaseBackoff)
+	require.True(t, manager.claim(1, "model"))
+	assert.False(t, manager.canAttempt(1, "model"))
+	assert.False(t, manager.claim(1, "model"))
+
+	now = now.Add(personalCircuitHalfOpenLease - time.Second)
+	assert.False(t, manager.canAttempt(1, "model"))
+	assert.False(t, manager.claim(1, "model"))
+
+	now = now.Add(time.Second)
+	assert.True(t, manager.canAttempt(1, "model"))
+	assert.True(t, manager.claim(1, "model"))
+}
+
+func TestPersonalCircuitIgnoresLateResultFromExpiredHalfOpenProbe(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
+	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+
+	now = now.Add(personalCircuitBaseBackoff)
+	require.True(t, manager.claim(1, "model"))
+	firstProbe := RelayAttempt{StartedAtMs: now.UnixMilli()}
+
+	now = now.Add(personalCircuitHalfOpenLease)
+	require.True(t, manager.claim(1, "model"))
+	secondProbe := RelayAttempt{StartedAtMs: now.UnixMilli()}
+
+	transitions := manager.recordSuccess(1, "model", secondProbe)
+	require.Len(t, transitions, 1)
+	assert.Equal(t, PersonalCircuitClosed, transitions[0].To)
+	assert.Empty(t, manager.recordSuccess(1, "model", firstProbe))
+	assert.Nil(t, manager.recordFailure(1, "channel", "model", RelayAttempt{
+		StartedAtMs: firstProbe.StartedAtMs,
+		Outcome:     RelayAttemptUpstream5xx,
+	}))
+	circuits, _ := manager.snapshot()
+	assert.Empty(t, circuits)
+}
+
+func TestPersonalCircuitIgnoresLateFailureAfterNewProbeFails(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
+	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+
+	now = now.Add(personalCircuitBaseBackoff)
+	require.True(t, manager.claim(1, "model"))
+	firstProbe := RelayAttempt{StartedAtMs: now.UnixMilli()}
+	now = now.Add(personalCircuitHalfOpenLease)
+	require.True(t, manager.claim(1, "model"))
+	secondProbe := RelayAttempt{StartedAtMs: now.UnixMilli()}
+
+	require.NotNil(t, manager.recordFailure(1, "channel", "model", RelayAttempt{
+		StartedAtMs: secondProbe.StartedAtMs,
+		Outcome:     RelayAttemptUpstream5xx,
+	}))
+	assert.Nil(t, manager.recordFailure(1, "channel", "model", RelayAttempt{
+		StartedAtMs: firstProbe.StartedAtMs,
+		Outcome:     RelayAttemptUpstream5xx,
+	}))
+	circuits, _ := manager.snapshot()
+	require.Len(t, circuits, 1)
+	assert.Equal(t, 2, circuits[0].ConsecutiveFailures)
 }
 
 func TestPersonalCircuitDoesNotOpenForClientOrLocalErrors(t *testing.T) {
@@ -100,7 +192,7 @@ func TestPersonalCircuitHonorsRetryAfterWithinCap(t *testing.T) {
 	})
 	circuits, _ := manager.snapshot()
 	require.Len(t, circuits, 1)
-	assert.Equal(t, now.Add(10*time.Minute).Unix(), circuits[0].RetryAt)
+	assert.Equal(t, now.Add(personalCircuitMaxBackoff).Unix(), circuits[0].RetryAt)
 
 	manager.recordFailure(2, "limited", "model", RelayAttempt{
 		Outcome:           RelayAttemptRateLimited,

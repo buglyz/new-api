@@ -27,11 +27,11 @@ func RecordPersonalCircuitFailure(channelID int, channelName, modelName string, 
 	}
 }
 
-func RecordPersonalCircuitSuccess(channelID int, modelName string) {
+func RecordPersonalCircuitSuccess(channelID int, modelName string, attempt ...RelayAttempt) {
 	if !operation_setting.SelfUseModeEnabled {
 		return
 	}
-	for _, transition := range personalCircuits.recordSuccess(channelID, modelName) {
+	for _, transition := range personalCircuits.recordSuccess(channelID, modelName, attempt...) {
 		notifyPersonalCircuitTransition(transition)
 	}
 }
@@ -88,6 +88,7 @@ func GetPersonalCircuitSnapshot() ([]PersonalCircuit, []PersonalCircuitTransitio
 		BaseBackoffSeconds:    int64(personalCircuitBaseBackoff / time.Second),
 		MaxBackoffSeconds:     int64(personalCircuitMaxBackoff / time.Second),
 		ModelBackoffSeconds:   int64(personalCircuitModelBackoff / time.Second),
+		AuthBackoffSeconds:    int64(personalCircuitAuthBackoff / time.Second),
 		ChannelBackoffSeconds: int64(personalCircuitChannelBackoff / time.Second),
 		HalfOpenLeaseSeconds:  int64(personalCircuitHalfOpenLease / time.Second),
 		Volatile:              true,

@@ -120,8 +120,8 @@ func RelayTask(c *gin.Context) {
 
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
 		if taskErr == nil {
-			service.CompleteRelayAttempt(c, attemptIndex, nil, false)
-			service.RecordPersonalCircuitSuccess(channel.Id, relayInfo.OriginModelName)
+			attempt := service.CompleteRelayAttempt(c, attemptIndex, nil, false)
+			service.RecordPersonalCircuitSuccess(channel.Id, relayInfo.OriginModelName, attempt)
 			break
 		}
 

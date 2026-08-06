@@ -54,6 +54,7 @@ export interface PersonalReliabilityResponse {
       base_backoff_seconds: number
       max_backoff_seconds: number
       model_backoff_seconds: number
+      auth_backoff_seconds: number
       channel_backoff_seconds: number
       half_open_lease_seconds: number
       volatile: boolean
