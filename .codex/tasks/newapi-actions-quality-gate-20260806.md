@@ -20,6 +20,8 @@ Validation note:
 
 - The first workflow run found and corrected pre-existing formatting debt in
   `controller/misc.go`; the quality gate remains a full-repository Go format check.
+- The second workflow run exposed unreachable statements after panic calls in
+  unsupported Claude converter paths; these now return explicit errors.
 
 Deployment policy:
 

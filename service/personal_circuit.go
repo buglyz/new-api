@@ -22,6 +22,7 @@ const (
 	personalCircuitAuthBackoff       = 15 * time.Minute
 	personalCircuitChannelBackoff    = 10 * time.Minute
 	personalCircuitHalfOpenLease     = 2 * time.Minute
+	personalCircuitFailureThreshold  = 3
 	personalCircuitNotifySuppression = 10 * time.Minute
 	personalCircuitMaxEntries        = 4096
 	personalCircuitMaxNotifications  = 1024
@@ -59,6 +60,7 @@ type PersonalCircuitTransition struct {
 }
 
 type PersonalCircuitPolicy struct {
+	FailureThreshold      int   `json:"failure_threshold"`
 	BaseBackoffSeconds    int64 `json:"base_backoff_seconds"`
 	MaxBackoffSeconds     int64 `json:"max_backoff_seconds"`
 	ModelBackoffSeconds   int64 `json:"model_backoff_seconds"`
@@ -122,6 +124,9 @@ func (m *personalCircuitManager) claim(channelID int, modelName string) bool {
 		return true
 	}
 	now := m.now()
+	if entry.Status == PersonalCircuitClosed {
+		return true
+	}
 	if entry.Status == PersonalCircuitHalfOpen && entry.halfOpenProbeInFlight && now.Unix() < entry.HalfOpenUntil {
 		return false
 	}
@@ -145,10 +150,14 @@ func (m *personalCircuitManager) claim(channelID int, modelName string) bool {
 }
 
 func (m *personalCircuitManager) entryForAttemptLocked(channelID int, modelName string) *PersonalCircuit {
-	if entry := m.entries[personalCircuitKey{channelID: channelID, model: personalCircuitAllModels}]; entry != nil {
-		return entry
+	channelEntry := m.entries[personalCircuitKey{channelID: channelID, model: personalCircuitAllModels}]
+	if channelEntry != nil && channelEntry.Status != PersonalCircuitClosed {
+		return channelEntry
 	}
-	return m.entries[personalCircuitKey{channelID: channelID, model: modelName}]
+	if modelEntry := m.entries[personalCircuitKey{channelID: channelID, model: modelName}]; modelEntry != nil {
+		return modelEntry
+	}
+	return channelEntry
 }
 
 func (m *personalCircuitManager) recordFailure(channelID int, channelName, modelName string, attempt RelayAttempt) *PersonalCircuitTransition {
@@ -166,14 +175,6 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	if m.staleAttemptLocked(key, attempt) || staleHalfOpenProbe(m.entryForAttemptLocked(channelID, modelName), attempt) {
 		return nil
 	}
-	if circuitModel == personalCircuitAllModels {
-		for existingKey := range m.entries {
-			if existingKey.channelID == channelID && existingKey != key {
-				m.markAttemptLocked(existingKey, attempt)
-				delete(m.entries, existingKey)
-			}
-		}
-	}
 	entry := m.entries[key]
 	from := PersonalCircuitClosed
 	if entry == nil {
@@ -185,16 +186,36 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	}
 	m.markAttemptLocked(key, attempt)
 	entry.ChannelName = channelName
-	entry.Status = PersonalCircuitOpen
 	entry.ConsecutiveFailures++
-	entry.OpenedAt = now.Unix()
-	entry.HalfOpenUntil = 0
 	entry.LastOutcome = attempt.Outcome
 	entry.LastStatusCode = attempt.StatusCode
 	entry.LastErrorCode = attempt.ErrorCode
 	entry.halfOpenProbeInFlight = false
 	entry.halfOpenProbeStarted = 0
-	entry.RetryAt = now.Add(personalCircuitBackoff(attempt, entry.ConsecutiveFailures)).Unix()
+	if from == PersonalCircuitHalfOpen || entry.ConsecutiveFailures >= personalCircuitFailureThreshold {
+		entry.Status = PersonalCircuitOpen
+		entry.OpenedAt = now.Unix()
+		entry.HalfOpenUntil = 0
+		backoffFailures := entry.ConsecutiveFailures - personalCircuitFailureThreshold + 1
+		if from == PersonalCircuitHalfOpen && backoffFailures < 2 {
+			backoffFailures = 2
+		}
+		entry.RetryAt = now.Add(personalCircuitBackoff(attempt, backoffFailures)).Unix()
+	} else {
+		entry.Status = PersonalCircuitClosed
+		entry.OpenedAt = 0
+		entry.HalfOpenUntil = 0
+		entry.RetryAt = 0
+		return nil
+	}
+	if circuitModel == personalCircuitAllModels {
+		for existingKey := range m.entries {
+			if existingKey.channelID == channelID && existingKey != key {
+				m.markAttemptLocked(existingKey, attempt)
+				delete(m.entries, existingKey)
+			}
+		}
+	}
 	if from == PersonalCircuitOpen {
 		return nil
 	}
@@ -227,6 +248,9 @@ func (m *personalCircuitManager) recordSuccess(channelID int, modelName string, 
 			m.markAttemptLocked(key, attempt[0])
 		}
 		delete(m.entries, key)
+		if entry.Status == PersonalCircuitClosed {
+			continue
+		}
 		transition := PersonalCircuitTransition{
 			ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
 			From: entry.Status, To: PersonalCircuitClosed, At: m.now().Unix(),
@@ -254,11 +278,14 @@ func (m *personalCircuitManager) reset(channelIDs map[int]struct{}, modelName st
 		if modelName != "" && key.model != modelName && key.model != personalCircuitAllModels {
 			continue
 		}
+		delete(m.entries, key)
+		if entry.Status == PersonalCircuitClosed {
+			continue
+		}
 		transition := PersonalCircuitTransition{
 			ChannelID: entry.ChannelID, ChannelName: entry.ChannelName, Model: entry.Model,
 			From: entry.Status, To: PersonalCircuitClosed, At: now,
 		}
-		delete(m.entries, key)
 		m.appendTransitionLocked(transition)
 		transitions = append(transitions, transition)
 	}
@@ -270,6 +297,9 @@ func (m *personalCircuitManager) snapshot() ([]PersonalCircuit, []PersonalCircui
 	defer m.mu.Unlock()
 	circuits := make([]PersonalCircuit, 0, len(m.entries))
 	for _, entry := range m.entries {
+		if entry.Status == PersonalCircuitClosed {
+			continue
+		}
 		circuits = append(circuits, *entry)
 	}
 	sort.Slice(circuits, func(i, j int) bool {

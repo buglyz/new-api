@@ -85,6 +85,7 @@ func ResetPersonalCircuit(channelID int, modelName string) bool {
 func GetPersonalCircuitSnapshot() ([]PersonalCircuit, []PersonalCircuitTransition, PersonalCircuitPolicy) {
 	circuits, transitions := personalCircuits.snapshot()
 	return circuits, transitions, PersonalCircuitPolicy{
+		FailureThreshold:      personalCircuitFailureThreshold,
 		BaseBackoffSeconds:    int64(personalCircuitBaseBackoff / time.Second),
 		MaxBackoffSeconds:     int64(personalCircuitMaxBackoff / time.Second),
 		ModelBackoffSeconds:   int64(personalCircuitModelBackoff / time.Second),

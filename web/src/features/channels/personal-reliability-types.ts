@@ -51,6 +51,7 @@ export interface PersonalReliabilityResponse {
     circuits: PersonalCircuit[]
     transitions: PersonalCircuitTransition[]
     policy: {
+      failure_threshold: number
       base_backoff_seconds: number
       max_backoff_seconds: number
       model_backoff_seconds: number

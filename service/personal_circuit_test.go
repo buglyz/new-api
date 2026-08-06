@@ -10,12 +10,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func recordFailures(manager *personalCircuitManager, count, channelID int, channelName, modelName string, attempt RelayAttempt) *PersonalCircuitTransition {
+	var transition *PersonalCircuitTransition
+	for range count {
+		transition = manager.recordFailure(channelID, channelName, modelName, attempt)
+	}
+	return transition
+}
+
+func TestPersonalCircuitRequiresConsecutiveFailuresBeforeOpening(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	manager := newPersonalCircuitManager(func() time.Time { return now })
+	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
+
+	for failure := 1; failure < personalCircuitFailureThreshold; failure++ {
+		assert.Nil(t, manager.recordFailure(1, "public", "model", attempt))
+		assert.True(t, manager.canAttempt(1, "model"))
+		assert.True(t, manager.claim(1, "model"))
+		circuits, transitions := manager.snapshot()
+		assert.Empty(t, circuits)
+		assert.Empty(t, transitions)
+	}
+
+	transition := manager.recordFailure(1, "public", "model", attempt)
+	require.NotNil(t, transition)
+	assert.Equal(t, PersonalCircuitOpen, transition.To)
+	assert.False(t, manager.canAttempt(1, "model"))
+	circuits, _ := manager.snapshot()
+	require.Len(t, circuits, 1)
+	assert.Equal(t, personalCircuitFailureThreshold, circuits[0].ConsecutiveFailures)
+	assert.Equal(t, now.Add(personalCircuitBaseBackoff).Unix(), circuits[0].RetryAt)
+}
+
+func TestPersonalCircuitSuccessClearsFailureStreak(t *testing.T) {
+	manager := newPersonalCircuitManager(time.Now)
+	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
+
+	recordFailures(manager, personalCircuitFailureThreshold-1, 1, "public", "model", attempt)
+	assert.Empty(t, manager.recordSuccess(1, "model"))
+	assert.Nil(t, manager.recordFailure(1, "public", "model", attempt))
+	assert.True(t, manager.canAttempt(1, "model"))
+	circuits, transitions := manager.snapshot()
+	assert.Empty(t, circuits)
+	assert.Empty(t, transitions)
+}
+
 func TestPersonalCircuitScopesModelNotFoundToModel(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
 	attempt := RelayAttempt{Outcome: RelayAttemptModelUnavailable, StatusCode: 404, ErrorCode: "model_not_found"}
 
-	transition := manager.recordFailure(7, "public", "model-a", attempt)
+	transition := recordFailures(manager, personalCircuitFailureThreshold, 7, "public", "model-a", attempt)
 	require.NotNil(t, transition)
 	assert.False(t, manager.canAttempt(7, "model-a"))
 	assert.True(t, manager.canAttempt(7, "model-b"))
@@ -32,7 +77,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 	manager := newPersonalCircuitManager(func() time.Time { return now })
 	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
 
-	manager.recordFailure(3, "low-sla", "model-a", attempt)
+	recordFailures(manager, personalCircuitFailureThreshold, 3, "low-sla", "model-a", attempt)
 	circuits, _ := manager.snapshot()
 	assert.Equal(t, now.Add(15*time.Second).Unix(), circuits[0].RetryAt)
 	assert.False(t, manager.claim(3, "model-a"))
@@ -57,7 +102,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 func TestPersonalCircuitOpensChannelWideForAuthAndConfigurationErrors(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
-	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401}))
+	require.NotNil(t, recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401}))
 	assert.False(t, manager.canAttempt(1, "model-a"))
 	assert.False(t, manager.canAttempt(1, "model-b"))
 
@@ -68,7 +113,7 @@ func TestPersonalCircuitOpensChannelWideForAuthAndConfigurationErrors(t *testing
 	assert.Equal(t, now.Add(personalCircuitAuthBackoff).Unix(), circuits[0].RetryAt)
 
 	manager.recordSuccess(1, "model-b")
-	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptChannelUnavailable}))
+	require.NotNil(t, recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model-a", RelayAttempt{Outcome: RelayAttemptChannelUnavailable}))
 	assert.False(t, manager.canAttempt(1, "model-b"))
 	circuits, _ = manager.snapshot()
 	require.Len(t, circuits, 1)
@@ -83,7 +128,7 @@ func TestPersonalCircuitScopesModelConfigurationErrorsToModel(t *testing.T) {
 		ErrorCode: string(types.ErrorCodeChannelModelMappedError),
 	}
 
-	require.NotNil(t, manager.recordFailure(1, "channel", "model-a", attempt))
+	require.NotNil(t, recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model-a", attempt))
 	assert.False(t, manager.canAttempt(1, "model-a"))
 	assert.True(t, manager.canAttempt(1, "model-b"))
 	circuits, _ := manager.snapshot()
@@ -95,7 +140,7 @@ func TestPersonalCircuitScopesModelConfigurationErrorsToModel(t *testing.T) {
 func TestPersonalCircuitHalfOpenClaimHasSingleProbeUntilLeaseExpires(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
-	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 
 	now = now.Add(personalCircuitBaseBackoff)
 	require.True(t, manager.claim(1, "model"))
@@ -114,7 +159,7 @@ func TestPersonalCircuitHalfOpenClaimHasSingleProbeUntilLeaseExpires(t *testing.
 func TestPersonalCircuitIgnoresLateResultFromExpiredHalfOpenProbe(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
-	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 
 	now = now.Add(personalCircuitBaseBackoff)
 	require.True(t, manager.claim(1, "model"))
@@ -139,7 +184,7 @@ func TestPersonalCircuitIgnoresLateResultFromExpiredHalfOpenProbe(t *testing.T) 
 func TestPersonalCircuitIgnoresLateFailureAfterNewProbeFails(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
-	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 
 	now = now.Add(personalCircuitBaseBackoff)
 	require.True(t, manager.claim(1, "model"))
@@ -158,7 +203,7 @@ func TestPersonalCircuitIgnoresLateFailureAfterNewProbeFails(t *testing.T) {
 	}))
 	circuits, _ := manager.snapshot()
 	require.Len(t, circuits, 1)
-	assert.Equal(t, 2, circuits[0].ConsecutiveFailures)
+	assert.Equal(t, personalCircuitFailureThreshold+1, circuits[0].ConsecutiveFailures)
 }
 
 func TestPersonalCircuitDoesNotOpenForClientOrLocalErrors(t *testing.T) {
@@ -172,7 +217,7 @@ func TestPersonalCircuitDoesNotOpenForClientOrLocalErrors(t *testing.T) {
 func TestPersonalCircuitOpensForRequestTimeouts(t *testing.T) {
 	manager := newPersonalCircuitManager(time.Now)
 	for _, statusCode := range []int{408, 425} {
-		transition := manager.recordFailure(1, "channel", "model", RelayAttempt{
+		transition := recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{
 			Outcome:    RelayAttemptTransportError,
 			StatusCode: statusCode,
 		})
@@ -185,7 +230,7 @@ func TestPersonalCircuitOpensForRequestTimeouts(t *testing.T) {
 func TestPersonalCircuitHonorsRetryAfterWithinCap(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	manager := newPersonalCircuitManager(func() time.Time { return now })
-	manager.recordFailure(1, "limited", "model", RelayAttempt{
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "limited", "model", RelayAttempt{
 		Outcome:           RelayAttemptRateLimited,
 		StatusCode:        429,
 		RetryAfterSeconds: 600,
@@ -194,7 +239,7 @@ func TestPersonalCircuitHonorsRetryAfterWithinCap(t *testing.T) {
 	require.Len(t, circuits, 1)
 	assert.Equal(t, now.Add(personalCircuitMaxBackoff).Unix(), circuits[0].RetryAt)
 
-	manager.recordFailure(2, "limited", "model", RelayAttempt{
+	recordFailures(manager, personalCircuitFailureThreshold, 2, "limited", "model", RelayAttempt{
 		Outcome:           RelayAttemptRateLimited,
 		StatusCode:        429,
 		RetryAfterSeconds: int((time.Hour) / time.Second),
@@ -220,8 +265,8 @@ func TestPersonalCircuitNotificationSuppressionIsPerTransition(t *testing.T) {
 func TestPersonalCircuitResetKeepsUntestedModelsOpen(t *testing.T) {
 	manager := newPersonalCircuitManager(time.Now)
 	attempt := RelayAttempt{Outcome: RelayAttemptModelUnavailable, StatusCode: 404}
-	manager.recordFailure(1, "channel", "tested-model", attempt)
-	manager.recordFailure(1, "channel", "other-model", attempt)
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "tested-model", attempt)
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "other-model", attempt)
 
 	transitions := manager.reset(map[int]struct{}{1: {}}, "tested-model")
 	require.Len(t, transitions, 1)
@@ -231,7 +276,7 @@ func TestPersonalCircuitResetKeepsUntestedModelsOpen(t *testing.T) {
 
 func TestPersonalCircuitResetModelAlsoClearsChannelWideCircuit(t *testing.T) {
 	manager := newPersonalCircuitManager(time.Now)
-	manager.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401})
+	recordFailures(manager, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptAuthError, StatusCode: 401})
 	assert.False(t, manager.canAttempt(1, "model"))
 
 	transitions := manager.reset(map[int]struct{}{1: {}}, "model")
@@ -245,7 +290,7 @@ func TestPersonalCircuitGateIsDisabledInStandardMode(t *testing.T) {
 	previousCircuits := personalCircuits
 	operation_setting.SelfUseModeEnabled = false
 	personalCircuits = newPersonalCircuitManager(time.Now)
-	personalCircuits.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 	t.Cleanup(func() {
 		operation_setting.SelfUseModeEnabled = previousMode
 		personalCircuits = previousCircuits
@@ -265,7 +310,7 @@ func TestClaimPersonalCircuitLegacyForceCannotBypassCooldown(t *testing.T) {
 		personalCircuits = previousCircuits
 	})
 
-	personalCircuits.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 
 	assert.False(t, ClaimPersonalCircuit(1, "model", true))
 }
@@ -281,9 +326,9 @@ func TestResetPersonalCircuitsClearsEveryModelForAChannel(t *testing.T) {
 	})
 
 	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
-	personalCircuits.recordFailure(1, "broken", "model-a", attempt)
-	personalCircuits.recordFailure(1, "broken", "model-b", attempt)
-	personalCircuits.recordFailure(2, "healthy", "model-a", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "broken", "model-a", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "broken", "model-b", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 2, "healthy", "model-a", attempt)
 	require.False(t, PersonalCircuitCanAttempt(1, "model-a"))
 
 	assert.Equal(t, 2, ResetPersonalCircuits([]int{1}))
@@ -297,7 +342,7 @@ func TestResetPersonalCircuitsIsInertInStandardMode(t *testing.T) {
 	previousCircuits := personalCircuits
 	operation_setting.SelfUseModeEnabled = true
 	personalCircuits = newPersonalCircuitManager(time.Now)
-	personalCircuits.recordFailure(1, "broken", "model-a", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "broken", "model-a", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 	t.Cleanup(func() {
 		operation_setting.SelfUseModeEnabled = previousMode
 		personalCircuits = previousCircuits
@@ -318,9 +363,9 @@ func TestForgetPersonalCircuitsClearsStateWithoutNotifying(t *testing.T) {
 	})
 
 	attempt := RelayAttempt{Outcome: RelayAttemptUpstream5xx, StatusCode: 503}
-	personalCircuits.recordFailure(1, "edited", "model-a", attempt)
-	personalCircuits.recordFailure(1, "edited", "model-b", attempt)
-	personalCircuits.recordFailure(2, "untouched", "model-a", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "edited", "model-a", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "edited", "model-b", attempt)
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 2, "untouched", "model-a", attempt)
 	require.False(t, PersonalCircuitCanAttempt(1, "model-a"))
 
 	ForgetPersonalCircuits(1)
@@ -345,7 +390,7 @@ func TestForgetPersonalCircuitsIsInertInStandardMode(t *testing.T) {
 		operation_setting.SelfUseModeEnabled = previousMode
 		personalCircuits = previousCircuits
 	})
-	personalCircuits.recordFailure(1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, 1, "channel", "model", RelayAttempt{Outcome: RelayAttemptUpstream5xx})
 
 	operation_setting.SelfUseModeEnabled = false
 	ForgetPersonalCircuits(1)

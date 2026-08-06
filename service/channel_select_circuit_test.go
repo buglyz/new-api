@@ -49,7 +49,7 @@ func TestChannelSelectionHonorsCircuitCooldownAndSingleHalfOpenClaim(t *testing.
 	model.InitChannelCache()
 	t.Cleanup(model.InitChannelCache)
 
-	personalCircuits.recordFailure(channel.Id, channel.Name, "test-model", RelayAttempt{
+	recordFailures(personalCircuits, personalCircuitFailureThreshold, channel.Id, channel.Name, "test-model", RelayAttempt{
 		Outcome: RelayAttemptUpstream5xx, StatusCode: 503,
 	})
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())

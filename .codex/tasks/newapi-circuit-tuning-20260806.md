@@ -18,3 +18,5 @@ Target policy:
 - Authentication backoff: 15 minutes.
 - Channel/configuration backoff: 10 minutes.
 - Half-open probe watchdog lease: 2 minutes.
+- Closed circuits open after 3 consecutive qualifying failures.
+- A successful attempt clears the pending failure streak.
