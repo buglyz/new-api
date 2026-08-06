@@ -11,24 +11,6 @@ import (
 
 type PersonalCircuitStatus string
 
-const (
-	PersonalCircuitClosed   PersonalCircuitStatus = "closed"
-	PersonalCircuitOpen     PersonalCircuitStatus = "open"
-	PersonalCircuitHalfOpen PersonalCircuitStatus = "half_open"
-
-	personalCircuitBaseBackoff       = 15 * time.Second
-	personalCircuitMaxBackoff        = 5 * time.Minute
-	personalCircuitModelBackoff      = 10 * time.Minute
-	personalCircuitAuthBackoff       = 15 * time.Minute
-	personalCircuitChannelBackoff    = 10 * time.Minute
-	personalCircuitHalfOpenLease     = 2 * time.Minute
-	personalCircuitFailureThreshold  = 3
-	personalCircuitNotifySuppression = 10 * time.Minute
-	personalCircuitMaxEntries        = 4096
-	personalCircuitMaxNotifications  = 1024
-	personalCircuitAllModels         = "*"
-)
-
 type PersonalCircuit struct {
 	ChannelID             int                   `json:"channel_id"`
 	ChannelName           string                `json:"channel_name,omitempty"`
@@ -36,6 +18,7 @@ type PersonalCircuit struct {
 	Scope                 string                `json:"scope"`
 	Status                PersonalCircuitStatus `json:"status"`
 	ConsecutiveFailures   int                   `json:"consecutive_failures"`
+	RecentFailures        []int64               `json:"recent_failures,omitempty"`
 	OpenedAt              int64                 `json:"opened_at"`
 	RetryAt               int64                 `json:"retry_at"`
 	HalfOpenUntil         int64                 `json:"half_open_until,omitempty"`
@@ -61,6 +44,7 @@ type PersonalCircuitTransition struct {
 
 type PersonalCircuitPolicy struct {
 	FailureThreshold      int   `json:"failure_threshold"`
+	WindowSeconds         int64 `json:"window_seconds"`
 	BaseBackoffSeconds    int64 `json:"base_backoff_seconds"`
 	MaxBackoffSeconds     int64 `json:"max_backoff_seconds"`
 	ModelBackoffSeconds   int64 `json:"model_backoff_seconds"`
@@ -161,7 +145,7 @@ func (m *personalCircuitManager) entryForAttemptLocked(channelID int, modelName 
 }
 
 func (m *personalCircuitManager) recordFailure(channelID int, channelName, modelName string, attempt RelayAttempt) *PersonalCircuitTransition {
-	if !opensPersonalCircuit(attempt.Outcome) || channelID <= 0 || modelName == "" {
+	if channelID <= 0 || modelName == "" || !opensPersonalCircuit(attempt.Outcome) {
 		return nil
 	}
 	m.mu.Lock()
@@ -186,28 +170,64 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	}
 	m.markAttemptLocked(key, attempt)
 	entry.ChannelName = channelName
-	entry.ConsecutiveFailures++
 	entry.LastOutcome = attempt.Outcome
 	entry.LastStatusCode = attempt.StatusCode
 	entry.LastErrorCode = attempt.ErrorCode
 	entry.halfOpenProbeInFlight = false
 	entry.halfOpenProbeStarted = 0
-	if from == PersonalCircuitHalfOpen || entry.ConsecutiveFailures >= personalCircuitFailureThreshold {
-		entry.Status = PersonalCircuitOpen
-		entry.OpenedAt = now.Unix()
-		entry.HalfOpenUntil = 0
-		backoffFailures := entry.ConsecutiveFailures - personalCircuitFailureThreshold + 1
-		if from == PersonalCircuitHalfOpen && backoffFailures < 2 {
-			backoffFailures = 2
-		}
-		entry.RetryAt = now.Add(personalCircuitBackoff(attempt, backoffFailures)).Unix()
-	} else {
-		entry.Status = PersonalCircuitClosed
-		entry.OpenedAt = 0
-		entry.HalfOpenUntil = 0
-		entry.RetryAt = 0
+	// An open circuit stays open during cooldown: a repeated failure must not
+	// downgrade the state back to closed.
+	if from == PersonalCircuitOpen {
 		return nil
 	}
+
+	entry.ConsecutiveFailures++
+	entry.RecentFailures = append(entry.RecentFailures, now.Unix())
+
+	retryAt := time.Time{}
+	switch {
+	case deterministicOutcome(attempt):
+		// Never self-healing failures trip on the first occurrence.
+		retryAt = now.Add(personalCircuitBackoff(attempt, 1))
+	case from == PersonalCircuitHalfOpen:
+		// A failed recovery probe reopens the circuit with at least a
+		// two-step backoff to avoid hammering a just-recovered upstream.
+		backoffFailures := entry.ConsecutiveFailures - personalCircuitFailureThreshold + 1
+		if backoffFailures < 2 {
+			backoffFailures = 2
+		}
+		retryAt = now.Add(personalCircuitBackoff(attempt, backoffFailures))
+	default:
+		// Transient failures trip only when the sliding window shows the
+		// channel is persistently unavailable: more than nine failed attempts
+		// inside the window with no success in between. Any success clears
+		// the window (recordSuccess), so a 100% failure rate is implied.
+		cutoff := now.Add(-personalCircuitWindow).Unix()
+		keep := 0
+		for _, ts := range entry.RecentFailures {
+			if ts >= cutoff {
+				entry.RecentFailures[keep] = ts
+				keep++
+			}
+		}
+		entry.RecentFailures = entry.RecentFailures[:keep]
+		entry.ConsecutiveFailures = len(entry.RecentFailures)
+		if entry.ConsecutiveFailures < personalCircuitFailureThreshold {
+			entry.Status = PersonalCircuitClosed
+			entry.OpenedAt = 0
+			entry.HalfOpenUntil = 0
+			entry.RetryAt = 0
+			return nil
+		}
+		backoffFailures := entry.ConsecutiveFailures - personalCircuitFailureThreshold + 1
+		retryAt = now.Add(personalCircuitBackoff(attempt, backoffFailures))
+	}
+
+	entry.Status = PersonalCircuitOpen
+	entry.OpenedAt = now.Unix()
+	entry.HalfOpenUntil = 0
+	entry.RetryAt = retryAt.Unix()
+
 	if circuitModel == personalCircuitAllModels {
 		for existingKey := range m.entries {
 			if existingKey.channelID == channelID && existingKey != key {
@@ -215,9 +235,6 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 				delete(m.entries, existingKey)
 			}
 		}
-	}
-	if from == PersonalCircuitOpen {
-		return nil
 	}
 	transition := PersonalCircuitTransition{
 		ChannelID: channelID, ChannelName: channelName, Model: circuitModel,
@@ -227,7 +244,6 @@ func (m *personalCircuitManager) recordFailure(channelID int, channelName, model
 	m.appendTransitionLocked(transition)
 	return &transition
 }
-
 func (m *personalCircuitManager) recordSuccess(channelID int, modelName string, attempt ...RelayAttempt) []PersonalCircuitTransition {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -369,65 +385,4 @@ func (m *personalCircuitManager) pruneEntriesLocked() {
 	if found {
 		delete(m.entries, oldestKey)
 	}
-}
-
-func opensPersonalCircuit(outcome RelayAttemptOutcome) bool {
-	return outcome == RelayAttemptTransportError || outcome == RelayAttemptRateLimited ||
-		outcome == RelayAttemptUpstream5xx || outcome == RelayAttemptModelUnavailable ||
-		outcome == RelayAttemptAuthError || outcome == RelayAttemptChannelUnavailable
-}
-
-func personalCircuitModel(attempt RelayAttempt, modelName string) string {
-	if attempt.Outcome == RelayAttemptAuthError ||
-		(attempt.Outcome == RelayAttemptChannelUnavailable && !isModelScopedChannelError(attempt)) {
-		return personalCircuitAllModels
-	}
-	return modelName
-}
-
-func isModelScopedChannelError(attempt RelayAttempt) bool {
-	switch types.ErrorCode(attempt.ErrorCode) {
-	case types.ErrorCodeChannelParamOverrideInvalid,
-		types.ErrorCodeChannelHeaderOverrideInvalid,
-		types.ErrorCodeChannelModelMappedError:
-		return true
-	default:
-		return false
-	}
-}
-
-func personalCircuitScope(modelName string) string {
-	if modelName == personalCircuitAllModels {
-		return "channel"
-	}
-	return "model"
-}
-
-func personalCircuitBackoff(attempt RelayAttempt, failures int) time.Duration {
-	if attempt.Outcome == RelayAttemptModelUnavailable {
-		return personalCircuitModelBackoff
-	}
-	if attempt.Outcome == RelayAttemptAuthError {
-		return personalCircuitAuthBackoff
-	}
-	if attempt.Outcome == RelayAttemptChannelUnavailable && !isModelScopedChannelError(attempt) {
-		return personalCircuitChannelBackoff
-	}
-	backoff := personalCircuitBaseBackoff
-	for i := 1; i < failures && backoff < personalCircuitMaxBackoff; i++ {
-		backoff *= 2
-	}
-	if backoff > personalCircuitMaxBackoff {
-		backoff = personalCircuitMaxBackoff
-	}
-	if attempt.Outcome == RelayAttemptRateLimited && attempt.RetryAfterSeconds > 0 {
-		retryAfter := time.Duration(attempt.RetryAfterSeconds) * time.Second
-		if retryAfter > personalCircuitMaxBackoff {
-			retryAfter = personalCircuitMaxBackoff
-		}
-		if retryAfter > backoff {
-			backoff = retryAfter
-		}
-	}
-	return backoff
 }

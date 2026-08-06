@@ -86,6 +86,7 @@ func GetPersonalCircuitSnapshot() ([]PersonalCircuit, []PersonalCircuitTransitio
 	circuits, transitions := personalCircuits.snapshot()
 	return circuits, transitions, PersonalCircuitPolicy{
 		FailureThreshold:      personalCircuitFailureThreshold,
+		WindowSeconds:         int64(personalCircuitWindow / time.Second),
 		BaseBackoffSeconds:    int64(personalCircuitBaseBackoff / time.Second),
 		MaxBackoffSeconds:     int64(personalCircuitMaxBackoff / time.Second),
 		ModelBackoffSeconds:   int64(personalCircuitModelBackoff / time.Second),

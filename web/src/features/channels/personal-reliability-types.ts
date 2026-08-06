@@ -23,6 +23,7 @@ export interface PersonalCircuit {
   scope: 'channel' | 'model'
   status: 'open' | 'half_open'
   consecutive_failures: number
+  recent_failures?: number[]
   opened_at: number
   retry_at: number
   half_open_until?: number
@@ -52,6 +53,7 @@ export interface PersonalReliabilityResponse {
     transitions: PersonalCircuitTransition[]
     policy: {
       failure_threshold: number
+      window_seconds: number
       base_backoff_seconds: number
       max_backoff_seconds: number
       model_backoff_seconds: number
