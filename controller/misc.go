@@ -104,7 +104,7 @@ func GetStatus(c *gin.Context) {
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
 
-		"oauth_register_enabled":       false,
+		"oauth_register_enabled":      false,
 		"oidc_enabled":                false,
 		"oidc_client_id":              "",
 		"oidc_authorization_endpoint": "",

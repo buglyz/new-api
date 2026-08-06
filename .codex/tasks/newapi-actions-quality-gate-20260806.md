@@ -16,6 +16,11 @@ Quality gate:
 - Focused race tests for personal failover, retry, and stream-state behavior.
 - Frontend frozen dependency install, typecheck, tests, and production build.
 
+Validation note:
+
+- The first workflow run found and corrected pre-existing formatting debt in
+  `controller/misc.go`; the quality gate remains a full-repository Go format check.
+
 Deployment policy:
 
 - The publish job runs only after both quality jobs pass.
