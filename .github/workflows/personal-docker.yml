@@ -92,10 +92,15 @@ jobs:
     defaults:
       run:
         working-directory: web
+    env:
+      BASE_SHA: ${{ github.event.before }}
+      HEAD_SHA: ${{ github.sha }}
 
     steps:
       - name: Check out
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -104,6 +109,15 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Lint changed frontend files
+        run: bun run lint:changed
+
+      - name: Format changed frontend files
+        run: bun run format:changed
+
+      - name: Check changed frontend copyright
+        run: bun run copyright:changed
 
       - name: Typecheck
         run: bun run typecheck
@@ -179,6 +193,15 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
+
+      - name: Verify published multi-arch manifest
+        env:
+          IMAGE_REF: ghcr.io/buglyz/new-api:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$IMAGE_REF" | tee "$RUNNER_TEMP/image-manifest.txt"
+          grep -Fq 'linux/amd64' "$RUNNER_TEMP/image-manifest.txt"
+          grep -Fq 'linux/arm64' "$RUNNER_TEMP/image-manifest.txt"
 
       - name: Write build summary
         env:
