@@ -35,7 +35,7 @@ import {
 } from '../../lib/personal-reliability'
 import {
   getPersonalReliability,
-  resetPersonalReliabilityCircuits,
+  resetAllPersonalReliabilityCircuits,
   runPersonalReliabilityTask,
 } from '../../personal-reliability-api'
 import { PersonalRoutePreview } from './personal-route-preview'
@@ -90,16 +90,16 @@ export function PersonalReliabilityDialog(props: {
   }
 
   const resetCircuits = async () => {
-    if (!canRunReliabilityBatch(circuitIDs)) return
+    if (circuits.length === 0) return
     setAction('reset')
     try {
-      const response = await resetPersonalReliabilityCircuits(circuitIDs)
+      const response = await resetAllPersonalReliabilityCircuits()
       if (!response.success) {
         toast.error(response.message || t('Operation failed'))
         return
       }
       await queryClient.invalidateQueries({ queryKey: ['channel-reliability'] })
-      toast.success(t('Temporary circuits reset'))
+      toast.success(t('All circuit breakers closed'))
     } catch {
       toast.error(t('Operation failed'))
     } finally {
@@ -137,10 +137,10 @@ export function PersonalReliabilityDialog(props: {
         <Button
           variant='ghost'
           onClick={resetCircuits}
-          disabled={circuitIDs.length === 0 || action != null}
+          disabled={circuits.length === 0 || action != null}
         >
           <RotateCcw data-icon='inline-start' />
-          {t('Reset temporary circuits')}
+          {t('Close all circuit breakers')}
         </Button>
       </div>
 

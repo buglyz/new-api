@@ -32,6 +32,7 @@ func TestPersonalReliabilityRoutesUseExpectedPermissions(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPost, "/reliability/probe", authz.ChannelOperate, controller.ProbePersonalReliabilityChannels)
 	assertChannelRoutePermission(t, http.MethodPost, "/reliability/recover", authz.ChannelOperate, controller.RecoverPersonalReliabilityChannels)
 	assertChannelRoutePermission(t, http.MethodPost, "/reliability/reset", authz.ChannelOperate, controller.ResetPersonalReliabilityCircuits)
+	assertChannelRoutePermission(t, http.MethodPost, "/reliability/reset-all", authz.ChannelOperate, controller.ResetAllPersonalReliabilityCircuits)
 	assertChannelRoutePermission(t, http.MethodPost, "/reliability/simulate", authz.ChannelRead, controller.SimulatePersonalRoute)
 }
 

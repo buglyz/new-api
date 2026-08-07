@@ -45,6 +45,7 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodPost, path: "/reliability/probe", permission: authz.ChannelOperate, handler: controller.ProbePersonalReliabilityChannels},
 	{method: http.MethodPost, path: "/reliability/recover", permission: authz.ChannelOperate, handler: controller.RecoverPersonalReliabilityChannels},
 	{method: http.MethodPost, path: "/reliability/reset", permission: authz.ChannelOperate, handler: controller.ResetPersonalReliabilityCircuits},
+	{method: http.MethodPost, path: "/reliability/reset-all", permission: authz.ChannelOperate, handler: controller.ResetAllPersonalReliabilityCircuits},
 	{method: http.MethodPost, path: "/reliability/simulate", permission: authz.ChannelRead, handler: controller.SimulatePersonalRoute},
 	{method: http.MethodGet, path: "/:id", permission: authz.ChannelRead, handler: controller.GetChannel},
 	{method: http.MethodGet, path: "/test", permission: authz.ChannelOperate, handler: controller.TestAllChannels},

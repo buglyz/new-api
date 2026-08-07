@@ -59,6 +59,10 @@ func ResetPersonalReliabilityCircuits(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{"reset_count": service.ResetPersonalCircuits(channelIDs)})
 }
 
+func ResetAllPersonalReliabilityCircuits(c *gin.Context) {
+	common.ApiSuccess(c, gin.H{"reset_count": service.ResetAllPersonalCircuits()})
+}
+
 func enqueuePersonalReliabilityTest(c *gin.Context, resetCircuitsOnSuccess bool) {
 	channelIDs, ok := parsePersonalReliabilityChannelIDs(c)
 	if !ok {

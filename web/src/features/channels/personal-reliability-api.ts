@@ -60,6 +60,15 @@ export async function resetPersonalReliabilityCircuits(
   return response.data
 }
 
+export async function resetAllPersonalReliabilityCircuits(): Promise<PersonalReliabilityTaskResponse> {
+  const response = await api.post(
+    '/api/channel/reliability/reset-all',
+    {},
+    reliabilityRequestConfig
+  )
+  return response.data
+}
+
 export async function simulatePersonalRoute(input: {
   group: string
   model: string
