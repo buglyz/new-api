@@ -5,8 +5,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 type PersonalCircuitStatus string
