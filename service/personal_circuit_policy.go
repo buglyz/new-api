@@ -7,6 +7,12 @@ import (
 )
 
 const (
+	PersonalCircuitClosed   PersonalCircuitStatus = "closed"
+	PersonalCircuitOpen     PersonalCircuitStatus = "open"
+	PersonalCircuitHalfOpen PersonalCircuitStatus = "half_open"
+)
+
+const (
 	personalCircuitBaseBackoff       = 15 * time.Second
 	personalCircuitMaxBackoff        = 5 * time.Minute
 	personalCircuitModelBackoff      = 10 * time.Minute
