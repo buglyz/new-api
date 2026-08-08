@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -64,7 +65,14 @@ func RelayTask(c *gin.Context) {
 		Retry:       common.GetPointer(0),
 	}
 
+	failoverBudget := time.Duration(common.RelayFailoverBudget) * time.Second
+	retryStart := time.Now()
+
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+		if failoverBudget > 0 && time.Since(retryStart) >= failoverBudget {
+			logger.LogWarn(c, "task retry failover budget exceeded")
+			break
+		}
 		var channel *model.Channel
 
 		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {

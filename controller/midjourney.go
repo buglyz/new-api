@@ -213,9 +213,13 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 			if err != nil {
 				logger.LogError(ctx, "UpdateMidjourneyTask task error: "+err.Error())
 			} else if won && shouldReturnQuota {
-				err = model.IncreaseUserQuota(task.UserId, task.Quota, false)
-				if err != nil {
-					logger.LogError(ctx, "fail to increase user quota: "+err.Error())
+				// Self-use build does not deduct wallet balances for new tasks.
+				// Legacy tasks may still carry a quota marker from a pre-trim
+				// deployment; clear the marker for audit visibility without
+				// mutating user or token quota.
+				task.Quota = 0
+				if err := task.Update(); err != nil {
+					logger.LogError(ctx, "clear legacy midjourney quota marker error: "+err.Error())
 				}
 				model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 					UserId:    task.UserId,
@@ -223,7 +227,7 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 					Content:   "",
 					ChannelId: task.ChannelId,
 					ModelName: service.CovertMjpActionToModelName(task.Action),
-					Quota:     task.Quota,
+					Quota:     0,
 					Other: map[string]interface{}{
 						"task_id": task.MjId,
 						"reason":  "构图失败",

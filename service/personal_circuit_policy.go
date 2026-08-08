@@ -13,11 +13,11 @@ const (
 )
 
 const (
-	personalCircuitBaseBackoff       = 15 * time.Second
-	personalCircuitMaxBackoff        = 5 * time.Minute
-	personalCircuitModelBackoff      = 10 * time.Minute
+	personalCircuitBaseBackoff       = 30 * time.Second
+	personalCircuitMaxBackoff        = 15 * time.Minute
+	personalCircuitModelBackoff      = 30 * time.Minute
 	personalCircuitAuthBackoff       = 15 * time.Minute
-	personalCircuitChannelBackoff    = 10 * time.Minute
+	personalCircuitChannelBackoff    = 15 * time.Minute
 	personalCircuitHalfOpenLease     = 2 * time.Minute
 	personalCircuitWindow            = 10 * time.Minute
 	personalCircuitFailureThreshold  = 10
@@ -92,6 +92,17 @@ func personalCircuitBackoff(attempt RelayAttempt, failures int) time.Duration {
 	}
 	if backoff > personalCircuitMaxBackoff {
 		backoff = personalCircuitMaxBackoff
+	}
+	// Honor an upstream Retry-After (seconds or HTTP date form) for transient
+	// failures, but never let it exceed the maximum cooldown.
+	if attempt.RetryAfterSeconds > 0 {
+		retryAfter := time.Duration(attempt.RetryAfterSeconds) * time.Second
+		if retryAfter > personalCircuitMaxBackoff {
+			retryAfter = personalCircuitMaxBackoff
+		}
+		if retryAfter > backoff {
+			backoff = retryAfter
+		}
 	}
 	return backoff
 }

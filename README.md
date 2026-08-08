@@ -179,10 +179,10 @@ cd deploy/personal
 | `REDIS_CONN_STRING` | 空 | 可选 Redis 缓存和分布式限流 |
 | `RELAY_CONNECT_TIMEOUT` | `10` | 上游连接超时，秒 |
 | `RELAY_RESPONSE_HEADER_TIMEOUT` | `20` | 等待上游响应头超时，秒 |
-| `RELAY_NON_STREAM_TIMEOUT` | `60` | 非流式单次请求超时，秒 |
-| `RELAY_FAILOVER_BUDGET` | `90` | 一次请求的总故障转移预算，秒 |
+| `RELAY_NON_STREAM_TIMEOUT` | `0` | 非流式单次请求超时，秒（`0` 表示不限制，沿用 `RELAY_TIMEOUT`） |
+| `RELAY_FAILOVER_BUDGET` | `90` | 一次请求的总故障转移预算，秒（`0` 表示禁用） |
 | `STREAM_FIRST_EVENT_TIMEOUT` | `35` | 首个有效流事件超时，秒 |
-| `STREAMING_TIMEOUT` | `90` | 流式空闲超时，秒 |
+| `STREAMING_TIMEOUT` | `90` | 收到首个有效事件后的流空闲超时，秒 |
 | `STREAM_SCANNER_MAX_BUFFER_MB` | `128` | 单个流事件允许的最大扫描缓冲 |
 | `MAX_REQUEST_BODY_MB` | `128` | 解压后的最大请求体 |
 | `ERROR_LOG_ENABLED` | `false` | 是否记录 relay 错误日志 |

@@ -8,7 +8,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ## Tech Stack
 
-- **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM
+- **Backend**: Go 1.25.1+, Gin web framework, GORM v2 ORM
 - **Frontend**: React 19, TypeScript, Rsbuild, Base UI, Tailwind CSS
 - **Databases**: SQLite, MySQL, PostgreSQL (all three must be supported)
 - **Cache**: Redis (go-redis) + in-memory cache
@@ -101,6 +101,8 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 - Avoid non-pointer scalars with `omitempty` for optional request parameters, because zero values will be silently dropped during marshal.
 
 **Billing expression system:** When working on tiered/dynamic billing (expression-based pricing), MUST read `pkg/billingexpr/expr.md` first. It documents the design philosophy, expression language, full architecture, token normalization rules, quota conversion, and expression versioning. All billing expression changes must follow that document.
+
+> Self-use fork note: The billing subsystem is REMOVED from the active request chain in this fork. `pkg/billingexpr`, `PreConsumeBilling`/`SettleBilling`/`PostConsumeQuota` and related service code are legacy-compatibility dead code kept only to ease upstream sync; they do not run in the relay/task paths. Keep them buildable but do not reintroduce them into the request chain.
 
 **Billing safety invariants:** Quota/billing code MUST never produce a negative charge (a credit) from arithmetic overflow or unvalidated input. Apply defense in depth:
 

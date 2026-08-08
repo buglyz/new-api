@@ -76,15 +76,19 @@ func newRelayHTTPTransport() *http.Transport {
 	if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok && defaultTransport != nil {
 		transport = defaultTransport.Clone()
 	} else {
+		connectTimeout := time.Duration(common.RelayConnectTimeout) * time.Second
+		if connectTimeout <= 0 {
+			connectTimeout = 10 * time.Second
+		}
 		dialer := &net.Dialer{
-			Timeout:   30 * time.Second,
+			Timeout:   connectTimeout,
 			KeepAlive: 30 * time.Second,
 		}
 		transport = &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           dialer.DialContext,
 			ForceAttemptHTTP2:     true,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   connectTimeout,
 			ExpectContinueTimeout: time.Second,
 		}
 	}
@@ -92,6 +96,9 @@ func newRelayHTTPTransport() *http.Transport {
 	transport.MaxIdleConnsPerHost = common.RelayMaxIdleConnsPerHost
 	transport.IdleConnTimeout = time.Duration(common.RelayIdleConnTimeout) * time.Second
 	transport.ForceAttemptHTTP2 = true
+	if common.RelayResponseHeaderTimeout > 0 {
+		transport.ResponseHeaderTimeout = time.Duration(common.RelayResponseHeaderTimeout) * time.Second
+	}
 	if common.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = common.InsecureTLSConfig
 	}
@@ -105,6 +112,8 @@ func newRelayHTTPClient(transport http.RoundTripper) *http.Client {
 	}
 	if common.RelayTimeout != 0 {
 		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
+	} else if common.RelayNonStreamTimeout != 0 {
+		client.Timeout = time.Duration(common.RelayNonStreamTimeout) * time.Second
 	}
 	return client
 }

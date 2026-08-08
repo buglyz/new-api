@@ -159,7 +159,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 
+	// A per-request total failover budget bounds how long a single relay may
+	// spend across retries. 0 (or a negative value) disables the cap.
+	failoverBudget := time.Duration(common.RelayFailoverBudget) * time.Second
+	retryStart := time.Now()
+
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+		if failoverBudget > 0 && time.Since(retryStart) >= failoverBudget {
+			logger.LogWarn(c, "retry failover budget exceeded")
+			break
+		}
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {

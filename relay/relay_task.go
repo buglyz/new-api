@@ -108,8 +108,8 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 
 // RelayTaskSubmit 完成 task 提交的全部流程（每次尝试调用一次）：
 // 刷新渠道元数据 → 确定 platform/adaptor → 验证请求 →
-// 构建、发送并解析上游请求。自用构建不执行计价或额度结算。
-// 控制器负责 defer Refund 和成功后 Settle。
+// 构建、发送并解析上游请求。自用构建不执行计价或额度结算，
+// 也不执行预扣（pre-consume）、refund 或结算（settle）。
 func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitResult, *dto.TaskError) {
 	info.InitChannelMeta(c)
 

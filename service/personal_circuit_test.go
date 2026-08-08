@@ -79,7 +79,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 
 	recordFailures(manager, personalCircuitFailureThreshold, 3, "low-sla", "model-a", attempt)
 	circuits, _ := manager.snapshot()
-	assert.Equal(t, now.Add(15*time.Second).Unix(), circuits[0].RetryAt)
+	assert.Equal(t, now.Add(30*time.Second).Unix(), circuits[0].RetryAt)
 	assert.False(t, manager.claim(3, "model-a"))
 
 	now = now.Add(30 * time.Second)
@@ -89,7 +89,7 @@ func TestPersonalCircuitUsesExponentialBackoffAndHalfOpenLease(t *testing.T) {
 
 	manager.recordFailure(3, "low-sla", "model-a", attempt)
 	circuits, _ = manager.snapshot()
-	assert.Equal(t, now.Add(30*time.Second).Unix(), circuits[0].RetryAt)
+	assert.Equal(t, now.Add(60*time.Second).Unix(), circuits[0].RetryAt)
 
 	now = now.Add(60 * time.Second)
 	assert.True(t, manager.claim(3, "model-a"))

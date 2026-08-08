@@ -26,6 +26,12 @@ const (
 	InitialScannerBufferSize    = 64 << 10  // 64KB (64*1024)
 	DefaultMaxScannerBufferSize = 128 << 20 // 64MB (64*1024*1024) default SSE buffer size
 	DefaultPingInterval         = 10 * time.Second
+	// DefaultFirstEventTimeout is used when the STREAM_FIRST_EVENT_TIMEOUT
+	// setting has not been initialized (e.g. in isolated tests).
+	DefaultFirstEventTimeout = 35 * time.Second
+	// DefaultStreamingTimeout is used when the STREAMING_TIMEOUT setting has
+	// not been initialized.
+	DefaultStreamingTimeout = 90 * time.Second
 	// streamWriteTimeout bounds a single blocked write to a slow client so the
 	// unconditional wg.Wait() in cleanup can always finish. Without it, a slow
 	// but connected client (full TCP buffer, no server WriteTimeout) could hang
@@ -86,11 +92,18 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	ctx, cancel := context.WithCancel(context.Background())
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	if streamingTimeout <= 0 {
+		streamingTimeout = DefaultStreamingTimeout
+	}
+	firstEventTimeout := time.Duration(constant.StreamFirstEventTimeout) * time.Second
+	if firstEventTimeout <= 0 {
+		firstEventTimeout = DefaultFirstEventTimeout
+	}
 
 	var (
 		stopChan    = make(chan bool, 3) // 增加缓冲区避免阻塞
 		scanner     = NewStreamScanner(resp.Body)
-		ticker      = time.NewTicker(streamingTimeout)
+		ticker      = time.NewTicker(firstEventTimeout)
 		pingTicker  *time.Ticker
 		writeMutex  sync.Mutex     // Mutex to protect concurrent writes
 		wg          sync.WaitGroup // 用于等待所有 goroutine 退出
@@ -247,7 +260,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
-			ticker.Reset(streamingTimeout)
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
 
@@ -265,6 +277,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			if !strings.HasPrefix(data, "[DONE]") {
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
+				// 收到有效事件后切换为流空闲超时，且只有有效事件才会重置计时器。
+				// 空行、注释和 heartbeat 不重置首事件计时器。
+				ticker.Reset(streamingTimeout)
 
 				select {
 				case dataChan <- data:
